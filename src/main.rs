@@ -85,7 +85,7 @@ async fn main() {
             format: surface_formats,
             width: size.width,
             height: size.height,
-            present_mode: PresentMode::Fifo,
+            present_mode: PresentMode::AutoNoVsync,
             alpha_mode: surface_capabilities.alpha_modes[0],
             view_formats: vec![],
         },

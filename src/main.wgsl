@@ -1,7 +1,7 @@
 var<private> vertices: array<vec2<f32>, 3> = array<vec2<f32>, 3>(
   vec2<f32>(-1., -1.),
-  vec2<f32>(1., -1.),
-  vec2<f32>(0., 1.),
+  vec2<f32>( 1., -1.),
+  vec2<f32>( 0.,  1.),
 );
 
 @vertex
