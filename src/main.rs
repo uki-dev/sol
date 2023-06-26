@@ -17,7 +17,7 @@ use winit::{
 async fn main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
-        .with_title("leika")
+        .with_title("🌎")
         .build(&event_loop)
         .unwrap();
 
