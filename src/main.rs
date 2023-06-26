@@ -1,6 +1,12 @@
-use std::borrow::Cow;
-use std::{borrow::Borrow, fs};
-use wgpu;
+use std::{borrow::Cow, fs};
+
+use wgpu::{
+    Color, CommandEncoderDescriptor, DeviceDescriptor, Features, FragmentState, Instance, Limits,
+    LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PowerPreference, PresentMode,
+    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration,
+    TextureUsages, TextureViewDescriptor, VertexState,
+};
 use winit::{
     event::{Event, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
@@ -15,11 +21,11 @@ async fn main() {
         .build(&event_loop)
         .unwrap();
 
-    let instance = wgpu::Instance::default();
+    let instance = Instance::default();
     let surface = unsafe { instance.create_surface(&window) }.unwrap();
     let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
+        .request_adapter(&RequestAdapterOptions {
+            power_preference: PowerPreference::HighPerformance,
             force_fallback_adapter: false,
             compatible_surface: Some(&surface),
         })
@@ -28,24 +34,22 @@ async fn main() {
 
     let (device, queue) = adapter
         .request_device(
-            &wgpu::DeviceDescriptor {
+            &DeviceDescriptor {
                 label: None,
-                features: wgpu::Features::empty(),
-                limits: wgpu::Limits::downlevel_defaults().using_resolution(adapter.limits()),
+                features: Features::empty(),
+                limits: Limits::downlevel_defaults().using_resolution(adapter.limits()),
             },
             None,
         )
         .await
         .expect("Failed to request device");
 
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+    let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(
-            &fs::read_to_string("src/main.wgsl").unwrap(),
-        )),
+        source: ShaderSource::Wgsl(Cow::Borrowed(&fs::read_to_string("src/main.wgsl").unwrap())),
     });
 
-    let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
         bind_group_layouts: &[],
         push_constant_ranges: &[],
@@ -54,34 +58,34 @@ async fn main() {
     let surface_capabilities = surface.get_capabilities(&adapter);
     let surface_formats = surface_capabilities.formats[0];
 
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+    let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
         layout: Some(&pipeline_layout),
-        vertex: wgpu::VertexState {
+        vertex: VertexState {
             module: &shader,
             entry_point: "vertex",
             buffers: &[],
         },
-        fragment: Some(wgpu::FragmentState {
+        fragment: Some(FragmentState {
             module: &shader,
             entry_point: "fragment",
             targets: &[Some(surface_formats.into())],
         }),
-        primitive: wgpu::PrimitiveState::default(),
+        primitive: PrimitiveState::default(),
         depth_stencil: None,
-        multisample: wgpu::MultisampleState::default(),
+        multisample: MultisampleState::default(),
         multiview: None,
     });
 
     let size = window.inner_size();
     surface.configure(
         &device,
-        &wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        &SurfaceConfiguration {
+            usage: TextureUsages::RENDER_ATTACHMENT,
             format: surface_formats,
             width: size.width,
             height: size.height,
-            present_mode: wgpu::PresentMode::Fifo,
+            present_mode: PresentMode::Fifo,
             alpha_mode: surface_capabilities.alpha_modes[0],
             view_formats: vec![],
         },
@@ -93,18 +97,18 @@ async fn main() {
 
     let view = current_texture
         .texture
-        .create_view(&wgpu::TextureViewDescriptor::default());
+        .create_view(&TextureViewDescriptor::default());
 
     let mut command_encoder =
-        device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        device.create_command_encoder(&CommandEncoderDescriptor { label: None });
     {
-        let mut render_pass = command_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        let mut render_pass = command_encoder.begin_render_pass(&RenderPassDescriptor {
             label: None,
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            color_attachments: &[Some(RenderPassColorAttachment {
                 view: &view,
                 resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                ops: Operations {
+                    load: LoadOp::Clear(Color::TRANSPARENT),
                     store: true,
                 },
             })],
