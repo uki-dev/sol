@@ -13,6 +13,9 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod engine;
+use engine::rendering::Camera;
+
 #[tokio::main]
 async fn main() {
     let event_loop = EventLoop::new();
@@ -120,6 +123,10 @@ async fn main() {
 
     queue.submit(Some(command_encoder.finish()));
     current_texture.present();
+
+    // dummy code to demonstrate use
+    let mut camera = Camera::new();
+    camera.position.z = -64.;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
