@@ -115,7 +115,7 @@ async fn main() {
             depth_stencil_attachment: None,
         });
         render_pass.set_pipeline(&render_pipeline);
-        render_pass.draw(0..3, 0..1);
+        render_pass.draw(0..6, 0..1);
     }
 
     queue.submit(Some(command_encoder.finish()));
