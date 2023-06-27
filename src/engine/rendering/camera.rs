@@ -21,11 +21,13 @@ impl Camera {
         Default::default()
     }
 
+    // TODO: look into memoization to avoid recalculating these each time
     pub fn world(&self) -> Mat4 {
         return Mat4::from_translation(self.position)
             * Rotor3::into_matrix(self.rotation).into_homogeneous();
     }
 
+    // TODO: look into memoization to avoid recalculating these each time
     pub fn projection(&self) -> Mat4 {
         perspective_wgpu_dx(self.fov, self.aspect, self.clip.near, self.clip.far)
     }
