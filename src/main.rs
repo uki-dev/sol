@@ -1,11 +1,12 @@
-use std::{borrow::Cow, fs};
+use std::{borrow::Cow, fs, mem::size_of};
 
 use wgpu::{
-    util::DeviceExt, Color, CommandEncoderDescriptor, DeviceDescriptor, Features, FragmentState,
-    Instance, Limits, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor,
-    PowerPreference, PresentMode, PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
-    RenderPipelineDescriptor, RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource,
-    SurfaceConfiguration, TextureUsages, TextureViewDescriptor, VertexState,
+    util::DeviceExt, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages, Color,
+    CommandEncoderDescriptor, DeviceDescriptor, Features, FragmentState, Instance, Limits, LoadOp,
+    MultisampleState, Operations, PipelineLayoutDescriptor, PowerPreference, PresentMode,
+    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration,
+    TextureUsages, TextureViewDescriptor, VertexState,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -94,40 +95,33 @@ async fn main() {
         multiview: None,
     });
 
-    let size = window.inner_size();
     let mut surface_configuration = SurfaceConfiguration {
         usage: TextureUsages::RENDER_ATTACHMENT,
         format: surface_formats,
-        width: size.width,
-        height: size.height,
+        width: 1,
+        height: 1,
         present_mode: PresentMode::AutoNoVsync,
         alpha_mode: surface_capabilities.alpha_modes[0],
         view_formats: vec![],
     };
-    surface.configure(&device, &surface_configuration);
 
-    let camera = Camera::new();
-    let inverse_view_projection = (camera.view() * camera.projection()).inversed();
-
-    let mut data = [0f32; 16 * 3];
-    data[..16].copy_from_slice(camera.view().as_array());
-    data[16..32].copy_from_slice(camera.projection().as_array());
-    data[32..48].copy_from_slice(inverse_view_projection.as_array());
-
-    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+    let buffer = device.create_buffer(&BufferDescriptor {
         label: Some("camera"),
-        contents: bytemuck::cast_slice(&data),
-        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        size: size_of::<f32>() as u64 * 16 * 3,
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
     });
 
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         layout: &bind_group_layout,
-        entries: &[wgpu::BindGroupEntry {
+        entries: &[BindGroupEntry {
             binding: 0,
             resource: buffer.as_entire_binding(),
         }],
         label: None,
     });
+
+    let mut camera = Camera::new();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -138,6 +132,15 @@ async fn main() {
             } => {
                 surface_configuration.width = size.width;
                 surface_configuration.height = size.height;
+
+                camera.aspect = size.width as f32 / size.height as f32;
+                let inverse_view_projection = (camera.view() * camera.projection()).inversed();
+                let mut data = [0f32; 16 * 3];
+                data[..16].copy_from_slice(camera.view().as_array());
+                data[16..32].copy_from_slice(camera.projection().as_array());
+                data[32..48].copy_from_slice(inverse_view_projection.as_array());
+                queue.write_buffer(&buffer, 0, bytemuck::cast_slice(&data));
+
                 surface.configure(&device, &surface_configuration);
                 window.request_redraw();
             }
