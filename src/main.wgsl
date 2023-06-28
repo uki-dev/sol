@@ -66,7 +66,7 @@ const LIGHT_DIRECTION = vec3<f32>(-0.25, -0.75, 0.5);
 
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
-    var uv: vec2<f32> = vertex.uv.xy;
+    var uv: vec2<f32> = vertex.uv;
     var direction = (camera.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
     // TODO: use far plane distance | constant max loop ?
     for (var step: f32 = 0.; step < MAX_STEPS; step += STEP_SIZE) {
