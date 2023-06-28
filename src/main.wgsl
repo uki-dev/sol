@@ -55,25 +55,25 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     return vec4<f32>(direction, 1.);
 }
 
-fn sdf_union(a: f32, b: f32) -> f32 { return min(a, b); }
+fn sharp_union(a: f32, b: f32) -> f32 { return min(a, b); }
 
-fn sdf_subtraction(a: f32, b: f32) -> f32 { return max(-a, b); }
+fn sharp_subtraction(a: f32, b: f32) -> f32 { return max(-a, b); }
 
-fn sdf_intersection(a: f32, b: f32) -> f32 { return max(a, b); }
+fn sharp_intersection(a: f32, b: f32) -> f32 { return max(a, b); }
 
-fn sdf_smooth_union(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(.5 + .5 * (d2 - d1) / k, .0, 1.);
-    return mix(d2, d1, h) - k * h * (1. - h);
+fn smooth_union(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(.5 + .5 * (b - a) / k, .0, 1.);
+    return mix(b, a, h) - k * h * (1. - h);
 }
 
-fn sdf_smooth_subtraction(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(.5 - .5 * (d2 + d1) / k, .0, 1.);
-    return mix(d2, -d1, h) + k * h * (1. - h);
+fn smooth_subtraction(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(.5 - .5 * (b + a) / k, .0, 1.);
+    return mix(b, -a, h) + k * h * (1. - h);
 }
 
-fn sdf_smooth_intersection(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(.5 - .5 * (d2 - d1) / k, .0, 1.);
-    return mix(d2, d1, h) + k * h * (1. - h);
+fn smooth_intersection(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(.5 - .5 * (b - a) / k, .0, 1.);
+    return mix(b, a, h) + k * h * (1. - h);
 }
 
 fn sphere(position: vec3<f32>, radius: f32) -> f32 {
@@ -81,28 +81,30 @@ fn sphere(position: vec3<f32>, radius: f32) -> f32 {
 }
 
 fn sdf(position: vec3<f32>) -> f32 {
-    return sdf_union(
-        sphere(position - vec3(0., 0., 2.), 0.5),
-        sdf_union(
-            sphere(position - vec3(-2., 0., 2.), 0.5),
-            sphere(position - vec3(2., 0., 2.), 0.5)
-        )
+    return smooth_union(
+        sphere(position - vec3(0., -.5, 2.), .5),
+        smooth_union(
+            sphere(position - vec3(-.5, 0., 2.), .5),
+            sphere(position - vec3(.5, 0., 2.), .5),
+            .5
+        ),
+        .5,
     );
 }
 
 // numerical gradient estimation
 fn normal(position: vec3<f32>) -> vec3<f32> {
-    let d1: f32 = sdf(position + vec3(EPSILON, 0., 0.));
-    let d2: f32 = sdf(position - vec3(EPSILON, 0., 0.));
-    let d3: f32 = sdf(position + vec3(0., EPSILON, 0.));
-    let d4: f32 = sdf(position - vec3(0., EPSILON, 0.));
-    let d5: f32 = sdf(position + vec3(0., 0., EPSILON));
-    let d6: f32 = sdf(position - vec3(0., 0., EPSILON));
+    let a: f32 = sdf(position + vec3(EPSILON, 0., 0.));
+    let b: f32 = sdf(position - vec3(EPSILON, 0., 0.));
+    let c: f32 = sdf(position + vec3(0., EPSILON, 0.));
+    let d: f32 = sdf(position - vec3(0., EPSILON, 0.));
+    let e: f32 = sdf(position + vec3(0., 0., EPSILON));
+    let f: f32 = sdf(position - vec3(0., 0., EPSILON));
 
     // return the normalised gradient
     return normalize(vec3<f32>(
-        (d1 - d2) / (2. * EPSILON),
-        (d3 - d4) / (2. * EPSILON),
-        (d5 - d6) / (2. * EPSILON)
+        (a - b) / (2. * EPSILON),
+        (c - d) / (2. * EPSILON),
+        (e - f) / (2. * EPSILON)
     ));
 }
