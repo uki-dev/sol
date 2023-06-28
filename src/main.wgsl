@@ -62,25 +62,24 @@ fn sdf_subtraction(a: f32, b: f32) -> f32 { return max(-a, b); }
 fn sdf_intersection(a: f32, b: f32) -> f32 { return max(a, b); }
 
 fn sdf_smooth_union(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
-    return mix(d2, d1, h) - k * h * (1.0 - h);
+    let h = clamp(.5 + .5 * (d2 - d1) / k, .0, 1.);
+    return mix(d2, d1, h) - k * h * (1. - h);
 }
 
 fn sdf_smooth_subtraction(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(0.5 - 0.5 * (d2 + d1) / k, 0.0, 1.0);
-    return mix(d2, -d1, h) + k * h * (1.0 - h);
+    let h = clamp(.5 - .5 * (d2 + d1) / k, .0, 1.);
+    return mix(d2, -d1, h) + k * h * (1. - h);
 }
 
 fn sdf_smooth_intersection(d1: f32, d2: f32, k: f32) -> f32 {
-    let h = clamp(0.5 - 0.5 * (d2 - d1) / k, 0.0, 1.0);
-    return mix(d2, d1, h) + k * h * (1.0 - h);
+    let h = clamp(.5 - .5 * (d2 - d1) / k, .0, 1.);
+    return mix(d2, d1, h) + k * h * (1. - h);
 }
 
 fn sphere(position: vec3<f32>, radius: f32) -> f32 {
     return length(position) - radius;
 }
 
-// entire sdf composition
 fn sdf(position: vec3<f32>) -> f32 {
     return sdf_union(
         sphere(position - vec3(0., 0., 2.), 0.5),
