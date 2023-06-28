@@ -22,6 +22,7 @@ impl Camera {
     #[inline]
     pub fn new() -> Self {
         Camera {
+            aspect: 1.,
             fov: 90.,
             clip: Clip {
                 near: 0.1,

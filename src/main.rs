@@ -117,8 +117,7 @@ async fn main() {
         .create_view(&TextureViewDescriptor::default());
 
     let camera = Camera::new();
-    let inverse_view_projection = (camera.projection() * camera.view()).inversed();
-    println!("{:?}", camera.projection().as_array());
+    let inverse_view_projection = (camera.view() * camera.projection()).inversed();
 
     let mut data = [0f32; 16 * 3];
     data[..16].copy_from_slice(camera.view().as_array());

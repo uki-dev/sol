@@ -51,8 +51,7 @@ const EPSILON = 0.001;
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = vertex.uv.xy;
-    // TODO: aspect ratio correction (this shouldn't be needed when we use a projection matrix though)
-    var direction = normalize(vec3(uv, 1.0));
+    var direction = (camera.inverse_view_projection * vec4(normalize(vec3(uv, 1.)), 1.)).xyz;
     // TODO: use far plane distance | constant max loop ?
     for (var step: f32 = 0.; step < MAX_STEPS; step += STEP_SIZE) {
         var position = direction * step;
