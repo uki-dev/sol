@@ -1,5 +1,3 @@
-// TODO: move to compute shader ? might still need vertex + fragment for some systems however
-
 struct Camera {
     view: mat4x4<f32>,
     projection: mat4x4<f32>,
@@ -34,31 +32,53 @@ fn vertex(
     return output;
 }
 
-// TODO: move to sdf include
-fn circle(r: f32, p: vec2<f32>) -> f32 {
-    return length(p) - r;
+fn sphere(position: vec3<f32>, radius: f32) -> f32 {
+    return length(position) - radius;
 }
 
-// TODO: move to sdf include
-fn sphere(p: vec3<f32>, r: f32) -> f32 {
-    return length(p) - r;
+// entire sdf composition
+fn sdf(position: vec3<f32>) -> f32 {
+    return sphere(position - vec3(0., 0., 2.), 0.5);
+}
+
+// numerical gradient estimation
+fn normal(position: vec3<f32>) -> vec3<f32> {
+    let d1: f32 = sdf(position + vec3(EPSILON, 0., 0.));
+    let d2: f32 = sdf(position - vec3(EPSILON, 0., 0.));
+    let d3: f32 = sdf(position + vec3(0., EPSILON, 0.));
+    let d4: f32 = sdf(position - vec3(0., EPSILON, 0.));
+    let d5: f32 = sdf(position + vec3(0., 0., EPSILON));
+    let d6: f32 = sdf(position - vec3(0., 0., EPSILON));
+
+    // return the normalised gradient
+    return normalize(vec3<f32>(
+        (d1 - d2) / (2. * EPSILON),
+        (d3 - d4) / (2. * EPSILON),
+        (d5 - d6) / (2. * EPSILON)
+    ));
 }
 
 const STEP_SIZE = 0.01;
 const MAX_STEPS = 128.;
 const EPSILON = 0.001;
 
+const LIGHT_DIRECTION = vec3<f32>(-0.25, -0.75, 0.5);
+
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = vertex.uv.xy;
-    var direction = (camera.inverse_view_projection * vec4(normalize(vec3(uv, 1.)), 1.)).xyz;
+    var direction = (camera.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
     // TODO: use far plane distance | constant max loop ?
     for (var step: f32 = 0.; step < MAX_STEPS; step += STEP_SIZE) {
         var position = direction * step;
-        var distance = sphere(position - vec3(0., 0., 2.0), 0.5);
+        var distance = sdf(position);
         if distance < EPSILON {
-            return vec4(1., 1., 1., 1.);
+            var normal = normal(position);
+
+            var diffuse = max(dot(normal, normalize(-LIGHT_DIRECTION)), 0.);
+
+            return vec4<f32>(1., 1., 1., 1.) * diffuse;
         }
     }
-    return vec4(direction, 1.);
+    return vec4<f32>(direction, 1.);
 }
