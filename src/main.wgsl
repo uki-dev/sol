@@ -55,6 +55,8 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     return vec4<f32>(direction, 1.);
 }
 
+// https://iquilezles.org/articles/distfunctions/
+
 fn sharp_union(a: f32, b: f32) -> f32 { return min(a, b); }
 
 fn sharp_subtraction(a: f32, b: f32) -> f32 { return max(-a, b); }
