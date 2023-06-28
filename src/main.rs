@@ -1,10 +1,10 @@
 use std::{borrow::Cow, fs, mem::size_of};
 
 use wgpu::{
-    util::DeviceExt, BindGroupEntry, Buffer, BufferDescriptor, BufferUsages, Color,
-    CommandEncoderDescriptor, DeviceDescriptor, Features, FragmentState, Instance, Limits, LoadOp,
-    MultisampleState, Operations, PipelineLayoutDescriptor, PowerPreference, PresentMode,
-    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
+    BindGroupEntry, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
+    DeviceDescriptor, Features, FragmentState, Instance, Limits, LoadOp, MultisampleState,
+    Operations, PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState,
+    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
     RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration,
     TextureUsages, TextureViewDescriptor, VertexState,
 };
