@@ -74,9 +74,7 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
         var distance = sdf(position);
         if distance < EPSILON {
             var normal = normal(position);
-
             var diffuse = max(dot(normal, normalize(-LIGHT_DIRECTION)), 0.);
-
             return vec4<f32>(1., 1., 1., 1.) * diffuse;
         }
     }
