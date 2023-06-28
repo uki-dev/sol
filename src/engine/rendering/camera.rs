@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use ultraviolet::{projection::lh_yup::perspective_wgpu_dx, Mat3, Mat4, Rotor3, Vec3, Vec4};
 
 #[derive(Default)]
@@ -23,7 +25,7 @@ impl Camera {
     pub fn new() -> Self {
         Camera {
             aspect: 1.,
-            fov: 90.,
+            fov: PI * 0.5,
             clip: Clip {
                 near: 0.1,
                 far: 1000.0,
