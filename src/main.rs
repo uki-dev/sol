@@ -1,11 +1,11 @@
 use std::{borrow::Cow, fs};
 
 use wgpu::{
-    Color, CommandEncoderDescriptor, DeviceDescriptor, Features, FragmentState, Instance, Limits,
-    LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor, PowerPreference, PresentMode,
-    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration,
-    TextureUsages, TextureViewDescriptor, VertexState,
+    util::DeviceExt, Color, CommandEncoderDescriptor, DeviceDescriptor, Features, FragmentState,
+    Instance, Limits, LoadOp, MultisampleState, Operations, PipelineLayoutDescriptor,
+    PowerPreference, PresentMode, PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
+    RenderPipelineDescriptor, RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource,
+    SurfaceConfiguration, TextureUsages, TextureViewDescriptor, VertexState,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -52,9 +52,23 @@ async fn main() {
         source: ShaderSource::Wgsl(Cow::Borrowed(&fs::read_to_string("src/main.wgsl").unwrap())),
     });
 
+    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: None,
+        entries: &[wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Buffer {
+                ty: wgpu::BufferBindingType::Uniform,
+                has_dynamic_offset: false,
+                min_binding_size: None,
+            },
+            count: None,
+        }],
+    });
+
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
         label: None,
-        bind_group_layouts: &[],
+        bind_group_layouts: &[&bind_group_layout],
         push_constant_ranges: &[],
     });
 
@@ -102,6 +116,30 @@ async fn main() {
         .texture
         .create_view(&TextureViewDescriptor::default());
 
+    let camera = Camera::new();
+    let inverse_view_projection = (camera.projection() * camera.view()).inversed();
+    println!("{:?}", camera.projection().as_array());
+
+    let mut data = [0f32; 16 * 3];
+    data[..16].copy_from_slice(camera.view().as_array());
+    data[16..32].copy_from_slice(camera.projection().as_array());
+    data[32..48].copy_from_slice(inverse_view_projection.as_array());
+
+    let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        label: Some("camera"),
+        contents: bytemuck::cast_slice(&data),
+        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        layout: &bind_group_layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+        label: None,
+    });
+
     let mut command_encoder =
         device.create_command_encoder(&CommandEncoderDescriptor { label: None });
     {
@@ -117,16 +155,13 @@ async fn main() {
             })],
             depth_stencil_attachment: None,
         });
+        render_pass.set_bind_group(0, &bind_group, &[]);
         render_pass.set_pipeline(&render_pipeline);
         render_pass.draw(0..6, 0..1);
     }
 
     queue.submit(Some(command_encoder.finish()));
     current_texture.present();
-
-    // dummy code to demonstrate use
-    let mut camera = Camera::new();
-    camera.position.z = -64.;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
