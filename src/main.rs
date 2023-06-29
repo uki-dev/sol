@@ -1,5 +1,6 @@
 use std::{borrow::Cow, fs, mem::size_of};
 
+use futures::executor::block_on;
 use wgpu::{
     BindGroupEntry, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     DeviceDescriptor, Features, FragmentState, Instance, Limits, LoadOp, MultisampleState,
@@ -16,9 +17,13 @@ use winit::{
 
 mod engine;
 use engine::rendering::Camera;
+use engine::simulation::Simulation;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    block_on(async_main());
+}
+
+async fn async_main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("🌎")
@@ -122,6 +127,10 @@ async fn main() {
     });
 
     let mut camera = Camera::new();
+
+    let mut simulation = Simulation::new();
+    simulation.initialise(&device);
+    simulation.dispatch(&device, &queue).await;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;

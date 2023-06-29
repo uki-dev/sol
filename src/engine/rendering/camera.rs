@@ -21,7 +21,6 @@ pub struct Camera {
 }
 
 impl Camera {
-    #[inline]
     pub fn new() -> Self {
         Camera {
             aspect: 1.,
