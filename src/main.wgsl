@@ -1,8 +1,10 @@
 const STEP_SIZE = 0.01;
-const MAX_STEPS = 128.;
+const MAX_DISTANCE = 12.8;
+const SHADOW_STEP_SIZE = 0.01;
+const SHADOW_MAX_DISTANCE = 8.;
 const EPSILON = 0.001;
 
-const LIGHT_DIRECTION = vec3<f32>(-0.25, -0.75, 0.5);
+const LIGHT_DIRECTION = vec3<f32>(0.5, 1., -0.3);
 
 struct Camera {
     view: mat4x4<f32>,
@@ -44,16 +46,29 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = vertex.uv;
     var direction = (camera.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
     // TODO: use far plane distance | constant max loop ?
-    for (var step: f32 = 0.; step < MAX_STEPS; step += STEP_SIZE) {
+    for (var step: f32 = 0.; step < MAX_DISTANCE; step += STEP_SIZE) {
         var position = direction * step;
         var distance = sdf(position);
         if distance < EPSILON {
             var normal = normal(position);
-            var diffuse = max(dot(normal, normalize(-LIGHT_DIRECTION)), 0.);
-            return vec4<f32>(1., 1., 1., 1.) * diffuse;
+            var diffuse = max(dot(normal, normalize(LIGHT_DIRECTION)), 0.);
+            var shadow = occlusion(position, normalize(LIGHT_DIRECTION));
+            return vec4<f32>(1., 1., 1., 1.) * diffuse * shadow;
         }
     }
     return vec4<f32>(direction, 1.);
+}
+
+fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {
+  // return position.y;
+    var startPosition: vec3<f32> = position + (normal(position) * 0.01);
+    for (var step: f32 = 0.; step < SHADOW_MAX_DISTANCE; step += SHADOW_STEP_SIZE) {
+        var distance = sdf(startPosition + (direction * step));
+        if distance < EPSILON {
+            return 0.1;
+        }
+    }
+    return 1.;
 }
 
 // https://iquilezles.org/articles/distfunctions/
@@ -84,25 +99,28 @@ fn sphere(position: vec3<f32>, radius: f32) -> f32 {
 }
 
 fn box(position: vec3<f32>, dimensions: vec3<f32>) -> f32 {
-  var x: f32 = abs(position.x) - dimensions.x;
-  var y: f32 = abs(position.y) - dimensions.y;
-  var z: f32 = abs(position.z) - dimensions.z;
-  return min(min(x, y), z);
+    var x: f32 = abs(position.x) - dimensions.x;
+    var y: f32 = abs(position.y) - dimensions.y;
+    var z: f32 = abs(position.z) - dimensions.z;
+    return min(min(x, y), z);
 }
 
 fn floorPlane(position: vec3<f32>, height: f32) -> f32 {
-  return position.y - height;
+    return position.y - height;
 }
 
 fn sdf(position: vec3<f32>) -> f32 {
-    return smooth_union(
-        sphere(position - vec3(0., -.5, 2.), .5),
+    return sharp_union(
+        floorPlane(position, -1.),
         smooth_union(
-            sphere(position - vec3(-.5, 0., 2.), .5),
-            sphere(position - vec3(.5, 0., 2.), .5),
-            .5
-        ),
-        .5,
+            sphere(position - vec3(0., -.5, 2.), .5),
+            smooth_union(
+                sphere(position - vec3(-.5, 0., 2.), .5),
+                sphere(position - vec3(.5, 0., 2.), .5),
+                .5
+            ),
+            .5,
+        )
     );
 }
 
