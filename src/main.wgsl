@@ -38,6 +38,7 @@ fn vertex(
     return output;
 }
 
+
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = vertex.uv;
@@ -80,6 +81,17 @@ fn smooth_intersection(a: f32, b: f32, k: f32) -> f32 {
 
 fn sphere(position: vec3<f32>, radius: f32) -> f32 {
     return length(position) - radius;
+}
+
+fn box(position: vec3<f32>, dimensions: vec3<f32>) -> f32 {
+  var x: f32 = abs(position.x) - dimensions.x;
+  var y: f32 = abs(position.y) - dimensions.y;
+  var z: f32 = abs(position.z) - dimensions.z;
+  return min(min(x, y), z);
+}
+
+fn floorPlane(position: vec3<f32>, height: f32) -> f32 {
+  return position.y - height;
 }
 
 fn sdf(position: vec3<f32>) -> f32 {
