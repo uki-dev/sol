@@ -1,6 +1,5 @@
-use bytemuck::{Pod, Zeroable};
 use futures::channel::oneshot;
-use std::{borrow::Cow, error::Error, mem::size_of};
+use std::{borrow::Cow, mem::size_of};
 // use ultraviolet::Vec3;
 use wgpu::{
     BindGroup, Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, ComputePipeline, Device,
