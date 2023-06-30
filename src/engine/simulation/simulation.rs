@@ -1,29 +1,21 @@
-use std::{borrow::Cow, mem::size_of};
-
 use bytemuck::{Pod, Zeroable};
 use futures::channel::oneshot;
+use std::{borrow::Cow, error::Error, mem::size_of};
 // use ultraviolet::Vec3;
-use wgpu::{BindGroup, Buffer, BufferDescriptor, BufferUsages, ComputePipeline, Device, Queue};
+use wgpu::{
+    BindGroup, Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, ComputePipeline, Device,
+    Queue,
+};
 
-#[derive(Debug, Clone, Copy)]
-pub enum Material {
-    Air,
-    Water,
-    Sand,
-    Soil,
-}
-unsafe impl Zeroable for Material {}
-unsafe impl Zeroable for Cell {}
+#[path = "cell.rs"]
+mod cell;
+use cell::Cell;
 
-#[derive(Debug, Clone, Copy)]
-pub struct Cell {
-    // wgsl does not support u8 so until we work out how to decode bytes into `pub material: Material` correctly, simply use this
-    pub material: u32,
-    // FIXME: having some issues with this not matching wgsl size, might not be using `f32` internally ? the lib is crazy macro heavy which makes it super hard to dig into
-    // pub velocity: Vec3,
+#[derive(Debug)]
+pub enum SimulationError {
+    SimulationNotInitialised,
+    BufferAsyncError(BufferAsyncError),
 }
-unsafe impl Pod for Material {}
-unsafe impl Pod for Cell {}
 
 #[derive(Default)]
 pub struct Simulation {
@@ -42,7 +34,6 @@ pub struct Simulation {
 
 impl Simulation {
     pub fn new() -> Self {
-        println!("constructor");
         Simulation {
             width: 8,
             height: 8,
@@ -99,64 +90,66 @@ impl Simulation {
         self.bind_group = Some(bind_group);
     }
 
-    pub async fn dispatch(&self, device: &Device, queue: &Queue) {
-        let (staging_buffer, storage_buffer, compute_pipeline, bind_group) = (
+    pub fn dispatch(&self, device: &Device, queue: &Queue) -> Result<(), SimulationError> {
+        let (staging_buffer, storage_buffer, compute_pipeline, bind_group) = match (
             &self.staging_buffer,
             &self.storage_buffer,
             &self.compute_pipeline,
             &self.bind_group,
-        );
-        match (staging_buffer, storage_buffer, compute_pipeline, bind_group) {
+        ) {
             (
                 Some(staging_buffer),
                 Some(storage_buffer),
                 Some(compute_pipeline),
                 Some(bind_group),
-            ) => {
-                let mut encoder =
-                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-                {
-                    let mut compute_pass =
-                        encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-                    compute_pass.set_pipeline(compute_pipeline);
-                    compute_pass.set_bind_group(0, bind_group, &[]);
-                    compute_pass.dispatch_workgroups(self.width, self.height, self.depth);
-                }
-                encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, self.size());
-                queue.submit(Some(encoder.finish()));
+            ) => (staging_buffer, storage_buffer, compute_pipeline, bind_group),
+            _ => return Err(SimulationError::SimulationNotInitialised),
+        };
 
-                let buffer_slice = staging_buffer.slice(..);
-                let (sender, receiver) = oneshot::channel();
-                buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
-
-                device.poll(wgpu::Maintain::Wait);
-
-                match receiver.await {
-                    Ok(Ok(())) => {
-                        let data = buffer_slice.get_mapped_range();
-                        let result = bytemuck::cast_slice::<u8, Cell>(&data).to_vec();
-
-                        println!("Buffer mapping completed successfully");
-                        for (i, cell) in result.iter().enumerate() {
-                            let i_u32: u32 = i as u32;
-                            let z = i_u32 / (self.width * self.height);
-                            let y = (i_u32 / self.width) % self.height;
-                            let x = i_u32 % self.width;
-                            println!("x: {}, y: {}, z: {}, cell: {:?}", x, y, z, cell);
-                        }
-                        println!("{} {}", size_of::<Material>(), size_of::<u8>());
-                    }
-                    Ok(Err(error)) => {
-                        eprintln!("Error during buffer mapping: {:?}", error);
-                    }
-                    Err(_) => {
-                        eprintln!("Buffer mapping was canceled");
-                    }
-                }
-            }
-            _ => {
-                eprintln!("`Dispatch` invoked without initialising `Simulation`");
-            }
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        {
+            let mut compute_pass =
+                encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
+            compute_pass.set_pipeline(compute_pipeline);
+            compute_pass.set_bind_group(0, bind_group, &[]);
+            compute_pass.dispatch_workgroups(self.width, self.height, self.depth);
         }
+        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, self.size());
+        queue.submit(Some(encoder.finish()));
+
+        Ok(())
+    }
+
+    pub async fn receive(&self, device: &Device) -> Result<(), SimulationError> {
+        let staging_buffer = match &self.staging_buffer {
+            Some(buffer) => buffer,
+            None => return Err(SimulationError::SimulationNotInitialised),
+        };
+        let buffer_slice = staging_buffer.slice(..);
+        let (sender, receiver) = oneshot::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |v| sender.send(v).unwrap());
+
+        device.poll(wgpu::Maintain::Wait);
+
+        match &receiver.await {
+            Ok(Err(error)) => return Err(SimulationError::BufferAsyncError(error.clone())),
+            // TODO: should we throw error if buffer mapping is cancelled ?
+            _ => {}
+        };
+
+        let data = buffer_slice.get_mapped_range();
+        let result = bytemuck::cast_slice::<u8, Cell>(&data).to_vec();
+
+        println!("Buffer mapping completed successfully");
+        for (i, cell) in result.iter().enumerate() {
+            let i_u32: u32 = i as u32;
+            let z = i_u32 / (self.width * self.height);
+            let y = (i_u32 / self.width) % self.height;
+            let x = i_u32 % self.width;
+            println!("x: {}, y: {}, z: {}, cell: {:?}", x, y, z, cell);
+        }
+
+        Ok(())
     }
 }

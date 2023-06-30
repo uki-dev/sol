@@ -1,6 +1,5 @@
-use std::{borrow::Cow, fs, mem::size_of};
-
 use futures::executor::block_on;
+use std::{borrow::Cow, fs, mem::size_of};
 use wgpu::{
     BindGroupEntry, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
     DeviceDescriptor, Features, FragmentState, Instance, Limits, LoadOp, MultisampleState,
@@ -130,7 +129,8 @@ async fn async_main() {
 
     let mut simulation = Simulation::new();
     simulation.initialise(&device);
-    simulation.dispatch(&device, &queue).await;
+    simulation.dispatch(&device, &queue);
+    let _ = simulation.receive(&device).await;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
