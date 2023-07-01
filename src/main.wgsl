@@ -1,9 +1,9 @@
 const EPSILON = .0001;
 
-const STEP_SIZE = .0001;
-const MAX_DISTANCE = 16.;
-const SHADOW_STEP_SIZE = .0001;
-const SHADOW_MAX_DISTANCE = 128.;
+const STEP_SIZE = .001;
+const MAX_DISTANCE = 8.;
+const SHADOW_STEP_SIZE = .001;
+const SHADOW_MAX_DISTANCE = 8.;
 
 const LIGHT_DIRECTION = vec3<f32>(.5, 1., -.3);
 
@@ -11,6 +11,11 @@ struct Uniforms {
     width: u32,
     height: u32,
     depth: u32,
+    view: mat4x4<f32>,
+    projection: mat4x4<f32>,
+    view_projection: mat4x4<f32>,
+    inverse_view: mat4x4<f32>,
+    inverse_projection: mat4x4<f32>,
     inverse_view_projection: mat4x4<f32>,
 }
 
@@ -43,7 +48,7 @@ var<private> vertices: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
 
 struct Vertex {
     @builtin(position) position: vec4<f32>,
-    @location(0) uv: vec2<f32>,
+    @location(0) ndc: vec2<f32>,
 }
 
 @vertex
@@ -52,39 +57,108 @@ fn vertex(
 ) -> Vertex {
     var output: Vertex;
     output.position = vec4<f32>(vertices[vertex_index], 0., 1.);
-    output.uv = output.position.xy;
+    output.ndc = output.position.xy;
     return output;
 }
 
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
-    let uv: vec2<f32> = vertex.uv;
-    let clp = uniforms.inverse_view_projection * vec4<f32>(0., 0., 0., 1.);
-    let ndc = clp / clp.w;
-    let ray_origin = (uniforms.inverse_view_projection * ndc).xyz;
-    let ray_direction = (uniforms.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
+    let ndc = vertex.ndc;
+    let ray_direction = normalize((uniforms.inverse_view_projection * vec4<f32>(ndc, 1., 1.)).xyz);
+    let ray_origin = vec3<f32>(
+        -uniforms.inverse_view[3][0],
+        -uniforms.inverse_view[3][1],
+        -uniforms.inverse_view[3][2]
+    );
     let light_direction = normalize(LIGHT_DIRECTION);
-    // TODO: implement better sdf based steps
-    // TODO: use far plane distance | constant max loop ?
     for (var step: f32 = 0.; step < MAX_DISTANCE; step += STEP_SIZE) {
         let position = ray_origin + ray_direction * step;
         let distance = sdf(position);
         if distance <= EPSILON {
             let normal = normal(position);
             let diffuse = max(dot(normal, light_direction), 0.);
-            let shadow = occlusion(position, light_direction);
-            return vec4<f32>(1., 1., 1., 1.) * diffuse * shadow;
+            return vec4<f32>(1., 1., 1., 1.) * diffuse;
         }
     }
-
     return vec4<f32>(ray_direction, 1.);
 }
 
+struct GridSample {
+    cell: Cell,
+    position: vec3<f32>,
+}
+
+fn sample_grid(position: vec3<f32>) -> GridSample {
+    // setup default sample
+    var sample: GridSample;
+    var empty_cell: Cell;
+    empty_cell.material = AIR;
+    sample.cell = empty_cell;
+
+    // map to grid space and sample cell
+    let half_size = vec3<f32>(8., 8., 8.) * .5;
+    let grid_position = position + half_size;
+    let cell_position = vec3<u32>(floor(grid_position));
+    if all(grid_position >= vec3<f32>(0., 0., 0.)) && all(grid_position < vec3<f32>(8., 8., 8.)) {
+        // x + y * width + z * width * height
+        let cell_index = cell_position.x + cell_position.y * 8u + cell_position.z * 8u * 8u;
+        let cell = cell_grid[cell_index];
+        sample.cell = cell;
+    }
+
+    sample.position = vec3<f32>(cell_position) - half_size - position + 0.5;
+    return sample;
+}
+
+var<private> neighbours: array<vec3<f32>, 14> = array<vec3<f32>, 14>(
+    // left
+    vec3<f32>(-1., .0, .0),
+    // right
+    vec3<f32>(1., .0, .0),
+    // bottom
+    vec3<f32>(.0, -1., .0),
+    // top
+    vec3<f32>(.0, 1., .0),
+    // back
+    vec3<f32>(.0, .0, -1.),
+    // front
+    vec3<f32>(.0, .0, 1.),
+    // back bottom left 
+    vec3<f32>(-1., -1., -1.),
+    // back bottom right 
+    vec3<f32>(1., -1., -1.),
+    // back top right 
+    vec3<f32>(1., 1., -1.),
+    // back top left 
+    vec3<f32>(-1., 1., -1.),
+    // front bottom left 
+    vec3<f32>(-1., -1., 1.),
+    // front bottom right 
+    vec3<f32>(1., -1., 1.),
+    // front top right 
+    vec3<f32>(1., 1., 1.),
+    // front top left 
+    vec3<f32>(-1., 1., 1.)
+);
+
 fn sdf(position: vec3<f32>) -> f32 {
-    return sharp_union(
-        plane_y_infinite(position - vec3<f32>(0., -1., 0.)),
-        sphere(position, 1.)
+    return smooth_union(
+        sphere(position - 1., 1.0),
+        sphere(position + 1., 1.0),
+        0.5
     );
+    // let sample = sample_grid(position);
+    // if sample.cell.material != AIR {
+    //     var distance = sphere(sample.position, 0.5);
+    //     for (var i = 0; i < 14; i++) {
+    //         let neighbour = sample_grid(position + neighbours[i]);
+    //         if neighbour.cell.material != AIR {
+    //             distance = smooth_union(distance, sphere(neighbour.position, 0.5), .2);
+    //         }
+    //     }
+    //     return distance;
+    // }
+    // return EPSILON * 2.;
 }
 
 fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {

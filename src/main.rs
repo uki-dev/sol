@@ -1,5 +1,6 @@
 use futures::executor::block_on;
-use std::{borrow::Cow, mem::size_of};
+use std::{borrow::Cow, mem::size_of, num::NonZeroU64};
+use ultraviolet::{Rotor3, Vec3};
 use wgpu::{
     BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor, DeviceDescriptor, Features,
     FragmentState, Instance, Limits, LoadOp, MultisampleState, Operations,
@@ -17,6 +18,26 @@ use winit::{
 mod engine;
 use engine::simulation::Simulation;
 use engine::{rendering::Camera, simulation::SimulationDescriptor};
+
+mod orbit_camera;
+
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+struct Uniforms {
+    width: u32,
+    height: u32,
+    depth: u32,
+    _padding: u32,
+    view: [f32; 4 * 4],
+    projection: [f32; 4 * 4],
+    view_projection: [f32; 4 * 4],
+    inverse_view: [f32; 4 * 4],
+    inverse_projection: [f32; 4 * 4],
+    inverse_view_projection: [f32; 4 * 4],
+}
+
+unsafe impl bytemuck::Pod for Uniforms {}
+unsafe impl bytemuck::Zeroable for Uniforms {}
 
 fn main() {
     block_on(async_main());
@@ -70,8 +91,8 @@ async fn async_main() {
     });
 
     let uniform_buffer: wgpu::Buffer = device.create_buffer(&BufferDescriptor {
-        label: Some("camera"),
-        size: size_of::<f32>() as u64 * 16 * 3,
+        label: Some("uniforms"),
+        size: size_of::<Uniforms>() as u64,
         usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         mapped_at_creation: false,
     });
@@ -153,11 +174,30 @@ async fn async_main() {
     };
 
     let mut camera = Camera::new();
-    camera.position.z = -5.;
+    camera.position.z = -16.;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
+            Event::WindowEvent {
+                event: WindowEvent::CursorMoved { position, .. },
+                ..
+            } => {
+                let window_size = window.inner_size();
+
+                let normalized_mouse_x = position.x as f32 / window_size.width as f32;
+                let normalized_mouse_y = position.y as f32 / window_size.height as f32;
+
+                // Calculate the rotation angles based on the mouse position
+                let rotation_x = normalized_mouse_x * std::f32::consts::PI * 2.0;
+                let rotation_y = normalized_mouse_y * std::f32::consts::PI * 2.0;
+
+                println!("mouse {} {}", rotation_x, rotation_y);
+
+                camera.rotation = Rotor3::from_euler_angles(0., rotation_y, rotation_x);
+                camera.position = camera.rotation * Vec3::new(0., 0., -16.);
+                window.request_redraw();
+            }
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),
                 ..
@@ -167,24 +207,19 @@ async fn async_main() {
 
                 camera.aspect = size.width as f32 / size.height as f32;
 
-                #[repr(C)]
-                #[derive(Default, Copy, Clone)]
-                struct Uniforms {
-                    width: u32,
-                    height: u32,
-                    depth: u32,
-                    _padding: u32,
-                    // mat4x4 must be aligned so we add this padding
-                    inverse_view_projection: [f32; 4 * 4],
-                }
-
-                unsafe impl bytemuck::Pod for Uniforms {}
-                unsafe impl bytemuck::Zeroable for Uniforms {}
-
+                surface.configure(&device, &surface_configuration);
+                window.request_redraw();
+            }
+            Event::RedrawRequested(_) => {
                 let uniforms = Uniforms {
                     width: simulation.width,
                     height: simulation.height,
                     depth: simulation.depth,
+                    view: camera.view().as_array().clone(),
+                    projection: camera.projection().as_array().clone(),
+                    view_projection: (camera.projection() * camera.view()).as_array().clone(),
+                    inverse_view: camera.view().inversed().as_array().clone(),
+                    inverse_projection: camera.projection().inversed().as_array().clone(),
                     inverse_view_projection: (camera.projection() * camera.view())
                         .inversed()
                         .as_array()
@@ -192,12 +227,10 @@ async fn async_main() {
                     ..Default::default()
                 };
 
+                println!("{:?} {:?}", camera.position, uniforms.view);
+
                 queue.write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
-                surface.configure(&device, &surface_configuration);
-                window.request_redraw();
-            }
-            Event::RedrawRequested(_) => {
                 let current_texture = surface
                     .get_current_texture()
                     .expect("Failed to get current texture");
