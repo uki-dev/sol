@@ -1,6 +1,6 @@
-use std::{f32::consts::PI, ops::Neg};
+use std::f32::consts::PI;
 
-use ultraviolet::{projection::lh_yup::perspective_wgpu_dx, Mat3, Mat4, Rotor3, Vec3, Vec4};
+use ultraviolet::{projection::lh_yup::perspective_wgpu_dx, Mat4, Rotor3, Vec3};
 
 #[derive(Default)]
 pub struct Clip {
