@@ -1,12 +1,12 @@
-use std::{borrow::Cow, fs, mem::size_of};
-
+use futures::executor::block_on;
+use std::{borrow::Cow, mem::size_of};
 use wgpu::{
-    BindGroupEntry, BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor,
-    DeviceDescriptor, Features, FragmentState, Instance, Limits, LoadOp, MultisampleState,
-    Operations, PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState,
+    BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor, DeviceDescriptor, Features,
+    FragmentState, Instance, Limits, LoadOp, MultisampleState, Operations,
+    PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-    RequestAdapterOptions, ShaderModuleDescriptor, ShaderSource, SurfaceConfiguration,
-    TextureUsages, TextureViewDescriptor, VertexState,
+    RequestAdapterOptions, ShaderModuleDescriptor, SurfaceConfiguration, TextureUsages,
+    TextureViewDescriptor, VertexState,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -15,10 +15,14 @@ use winit::{
 };
 
 mod engine;
-use engine::rendering::Camera;
+use engine::simulation::Simulation;
+use engine::{rendering::Camera, simulation::SimulationDescriptor};
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    block_on(async_main());
+}
+
+async fn async_main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("🌎")
@@ -35,7 +39,6 @@ async fn main() {
         })
         .await
         .expect("Failed to request adapter");
-
     let (device, queue) = adapter
         .request_device(
             &DeviceDescriptor {
@@ -47,24 +50,71 @@ async fn main() {
         )
         .await
         .expect("Failed to request device");
+    let surface_capabilities = surface.get_capabilities(&adapter);
+    let surface_formats = surface_capabilities.formats[0];
+
+    let simulation = Simulation::new(
+        &SimulationDescriptor {
+            width: 8,
+            height: 8,
+            depth: 8,
+        },
+        &device,
+    );
+    simulation.dispatch(&device, &queue);
+    let _ = simulation.receive(&device).await;
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: None,
-        source: ShaderSource::Wgsl(Cow::Borrowed(&fs::read_to_string("src/main.wgsl").unwrap())),
+        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("main.wgsl"))),
+    });
+
+    let uniform_buffer: wgpu::Buffer = device.create_buffer(&BufferDescriptor {
+        label: Some("camera"),
+        size: size_of::<f32>() as u64 * 16 * 3,
+        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        mapped_at_creation: false,
     });
 
     let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         label: None,
-        entries: &[wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::VERTEX | wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Buffer {
-                ty: wgpu::BufferBindingType::Uniform,
-                has_dynamic_offset: false,
-                min_binding_size: None,
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
             },
-            count: None,
-        }],
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            },
+        ],
+    });
+
+    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout: &bind_group_layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform_buffer.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: simulation.storage_buffer.as_entire_binding(),
+            },
+        ],
     });
 
     let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
@@ -72,9 +122,6 @@ async fn main() {
         bind_group_layouts: &[&bind_group_layout],
         push_constant_ranges: &[],
     });
-
-    let surface_capabilities = surface.get_capabilities(&adapter);
-    let surface_formats = surface_capabilities.formats[0];
 
     let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
         label: None,
@@ -105,23 +152,8 @@ async fn main() {
         view_formats: vec![],
     };
 
-    let buffer = device.create_buffer(&BufferDescriptor {
-        label: Some("camera"),
-        size: size_of::<f32>() as u64 * 16 * 3,
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        layout: &bind_group_layout,
-        entries: &[BindGroupEntry {
-            binding: 0,
-            resource: buffer.as_entire_binding(),
-        }],
-        label: None,
-    });
-
     let mut camera = Camera::new();
+    camera.position.z = -5.;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -134,12 +166,33 @@ async fn main() {
                 surface_configuration.height = size.height;
 
                 camera.aspect = size.width as f32 / size.height as f32;
-                let inverse_view_projection = (camera.view() * camera.projection()).inversed();
-                let mut data = [0f32; 16 * 3];
-                data[..16].copy_from_slice(camera.view().as_array());
-                data[16..32].copy_from_slice(camera.projection().as_array());
-                data[32..48].copy_from_slice(inverse_view_projection.as_array());
-                queue.write_buffer(&buffer, 0, bytemuck::cast_slice(&data));
+
+                #[repr(C)]
+                #[derive(Default, Copy, Clone)]
+                struct Uniforms {
+                    width: u32,
+                    height: u32,
+                    depth: u32,
+                    _padding: u32,
+                    // mat4x4 must be aligned so we add this padding
+                    inverse_view_projection: [f32; 4 * 4],
+                }
+
+                unsafe impl bytemuck::Pod for Uniforms {}
+                unsafe impl bytemuck::Zeroable for Uniforms {}
+
+                let uniforms = Uniforms {
+                    width: simulation.width,
+                    height: simulation.height,
+                    depth: simulation.depth,
+                    inverse_view_projection: (camera.projection() * camera.view())
+                        .inversed()
+                        .as_array()
+                        .clone(),
+                    ..Default::default()
+                };
+
+                queue.write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
 
                 surface.configure(&device, &surface_configuration);
                 window.request_redraw();
@@ -177,6 +230,7 @@ async fn main() {
                 queue.submit(Some(command_encoder.finish()));
                 current_texture.present();
             }
+            // TODO: explicity destroy GPU resources (although many operating systems will do this automatically its not good practice to rely on)
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 window_id,
