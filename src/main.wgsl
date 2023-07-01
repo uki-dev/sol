@@ -58,21 +58,21 @@ fn vertex(
 
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
-    var uv: vec2<f32> = vertex.uv;
-    var clp = uniforms.inverse_view_projection * vec4<f32>(0., 0., 0., 1.);
-    var ndc = clp / clp.w;
-    var ray_origin = (uniforms.inverse_view_projection * ndc).xyz;
-    var ray_direction = (uniforms.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
-    var light_direction = normalize(LIGHT_DIRECTION);
+    let uv: vec2<f32> = vertex.uv;
+    let clp = uniforms.inverse_view_projection * vec4<f32>(0., 0., 0., 1.);
+    let ndc = clp / clp.w;
+    let ray_origin = (uniforms.inverse_view_projection * ndc).xyz;
+    let ray_direction = (uniforms.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
+    let light_direction = normalize(LIGHT_DIRECTION);
     // TODO: implement better sdf based steps
     // TODO: use far plane distance | constant max loop ?
     for (var step: f32 = 0.; step < MAX_DISTANCE; step += STEP_SIZE) {
-        var position = ray_origin + ray_direction * step;
-        var distance = sdf(position);
+        let position = ray_origin + ray_direction * step;
+        let distance = sdf(position);
         if distance <= EPSILON {
-            var normal = normal(position);
-            var diffuse = max(dot(normal, light_direction), 0.);
-            var shadow = occlusion(position, light_direction);
+            let normal = normal(position);
+            let diffuse = max(dot(normal, light_direction), 0.);
+            let shadow = occlusion(position, light_direction);
             return vec4<f32>(1., 1., 1., 1.) * diffuse * shadow;
         }
     }
@@ -89,9 +89,9 @@ fn sdf(position: vec3<f32>) -> f32 {
 
 fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {
     // return position.y;
-    var start: vec3<f32> = position + (normal(position) * .01);
+    let start: vec3<f32> = position + (normal(position) * .01);
     for (var step: f32 = .01; step < SHADOW_MAX_DISTANCE; step += SHADOW_STEP_SIZE) {
-        var distance = sdf(start + (direction * step));
+        let distance = sdf(start + (direction * step));
         if distance < EPSILON {
             return .1;
         }
@@ -110,9 +110,9 @@ fn plane_y_infinite(position: vec3<f32>) -> f32 {
 }
 
 fn cube(position: vec3<f32>, dimensions: vec3<f32>) -> f32 {
-    var x: f32 = abs(position.x) - dimensions.x;
-    var y: f32 = abs(position.y) - dimensions.y;
-    var z: f32 = abs(position.z) - dimensions.z;
+    let x: f32 = abs(position.x) - dimensions.x;
+    let y: f32 = abs(position.y) - dimensions.y;
+    let z: f32 = abs(position.z) - dimensions.z;
     return min(min(x, y), z);
 }
 
