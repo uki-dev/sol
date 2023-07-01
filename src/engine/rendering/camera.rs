@@ -1,4 +1,4 @@
-use std::f32::consts::PI;
+use std::{f32::consts::PI, ops::Neg};
 
 use ultraviolet::{projection::lh_yup::perspective_wgpu_dx, Mat3, Mat4, Rotor3, Vec3, Vec4};
 
@@ -35,8 +35,9 @@ impl Camera {
 
     // TODO: look into memoization to avoid expensive matrix recalculation
     pub fn view(&self) -> Mat4 {
-        return Mat4::from_translation(self.position)
-            * Rotor3::into_matrix(self.rotation).into_homogeneous();
+        let forward = self.rotation * Vec3::unit_z();
+        let up = self.rotation * Vec3::unit_y();
+        return Mat4::look_at(self.position, self.position + forward, up);
     }
 
     // TODO: look into memoization to avoid expensive matrix recalculation
