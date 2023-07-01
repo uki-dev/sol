@@ -1,18 +1,33 @@
-const STEP_SIZE = 0.01;
+const AIR = 0u;
+const WATER = 1u;
+const SAND = 2u;
+const SOIL = 3u;
+
+const STEP_SIZE = 0.0001;
 const MAX_STEPS = 128.;
 const EPSILON = 0.001;
 
 const LIGHT_DIRECTION = vec3<f32>(-0.25, -0.75, 0.5);
 
-struct Camera {
-    view: mat4x4<f32>,
-    projection: mat4x4<f32>,
+struct Uniforms {
+    width: u32,
+    height: u32,
+    depth: u32,
     inverse_view_projection: mat4x4<f32>,
+}
+
+struct Cell {
+    material: u32,
+    // velocity: vec3<f32>,
 }
 
 @group(0)
 @binding(0)
-var<uniform> camera: Camera;
+var<uniform> uniforms: Uniforms;
+
+@group(0)
+@binding(1)
+var<storage, read> cell_grid: array<Cell>;
 
 var<private> vertices: array<vec2<f32>, 6> = array<vec2<f32>, 6>(
     vec2<f32>(-1., -1.),
@@ -41,18 +56,27 @@ fn vertex(
 @fragment
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     var uv: vec2<f32> = vertex.uv;
-    var direction = (camera.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
+    var clp = uniforms.inverse_view_projection * vec4<f32>(0., 0., 0., 1.);
+    var ndc = clp / clp.w;
+    var ray_origin = (uniforms.inverse_view_projection * ndc).xyz;
+    var ray_direction = (uniforms.inverse_view_projection * vec4<f32>(normalize(vec3<f32>(uv, 1.)), 1.)).xyz;
+    // TODO: implement better sdf based steps
     // TODO: use far plane distance | constant max loop ?
     for (var step: f32 = 0.; step < MAX_STEPS; step += STEP_SIZE) {
-        var position = direction * step;
+        var position = ray_origin + ray_direction * step;
         var distance = sdf(position);
-        if distance < EPSILON {
+        if distance <= EPSILON {
             var normal = normal(position);
             var diffuse = max(dot(normal, normalize(-LIGHT_DIRECTION)), 0.);
             return vec4<f32>(1., 1., 1., 1.) * diffuse;
         }
     }
-    return vec4<f32>(direction, 1.);
+
+    return vec4<f32>(ray_direction, 1.);
+}
+
+fn sdf(position: vec3<f32>) -> f32 {
+    return sphere(position, 1.);
 }
 
 // https://iquilezles.org/articles/distfunctions/
@@ -80,18 +104,6 @@ fn smooth_intersection(a: f32, b: f32, k: f32) -> f32 {
 
 fn sphere(position: vec3<f32>, radius: f32) -> f32 {
     return length(position) - radius;
-}
-
-fn sdf(position: vec3<f32>) -> f32 {
-    return smooth_union(
-        sphere(position - vec3(0., -.5, 2.), .5),
-        smooth_union(
-            sphere(position - vec3(-.5, 0., 2.), .5),
-            sphere(position - vec3(.5, 0., 2.), .5),
-            .5
-        ),
-        .5,
-    );
 }
 
 // numerical gradient estimation
