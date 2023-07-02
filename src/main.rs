@@ -165,7 +165,7 @@ async fn async_main() {
     };
 
     let mut camera = Camera::new();
-    camera.position.z = -5.;
+    camera.position.z = -10.;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
