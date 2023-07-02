@@ -19,8 +19,6 @@ mod engine;
 use engine::simulation::Simulation;
 use engine::{rendering::Camera, simulation::SimulationDescriptor};
 
-mod orbit_camera;
-
 #[repr(C)]
 #[derive(Default, Copy, Clone)]
 struct Uniforms {
@@ -186,7 +184,7 @@ async fn async_main() {
 
                 camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
                     * Quat::from_axis_angle(Vec3::Y, rotation_y);
-                camera.position = camera.rotation * Vec3::new(0., 0., -16.);
+                camera.position = camera.rotation * Vec3::new(0., 0., -10.);
 
                 window.request_redraw();
             }
