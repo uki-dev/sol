@@ -1,6 +1,5 @@
+use glam::{self, Mat4, Quat, Vec3};
 use std::f32::consts::PI;
-
-use ultraviolet::{projection::lh_yup::perspective_wgpu_dx, Mat4, Rotor3, Vec3};
 
 #[derive(Default)]
 pub struct Clip {
@@ -17,14 +16,14 @@ pub struct Camera {
     pub aspect: f32,
     pub clip: Clip,
     pub position: Vec3,
-    pub rotation: Rotor3,
+    pub rotation: Quat,
 }
 
 impl Camera {
     pub fn new() -> Self {
         Camera {
             aspect: 1.,
-            fov: PI * 0.5,
+            fov: PI / 3.,
             clip: Clip {
                 near: 0.1,
                 far: 128.0,
@@ -35,14 +34,14 @@ impl Camera {
 
     // TODO: look into memoization to avoid expensive matrix recalculation
     pub fn view(&self) -> Mat4 {
-        let forward = self.rotation * Vec3::unit_z();
-        let up = self.rotation * Vec3::unit_y();
-        return Mat4::look_at(self.position, self.position + forward, up);
+        let forward = self.rotation * Vec3::Z;
+        let up = self.rotation * Vec3::Y;
+        return Mat4::look_at_lh(self.position, self.position + forward, up);
     }
 
     // TODO: look into memoization to avoid expensive matrix recalculation
     // TODO: use reversed depth buffer for greater precision closer to the near clip plane
     pub fn projection(&self) -> Mat4 {
-        perspective_wgpu_dx(self.fov, self.aspect, self.clip.near, self.clip.far)
+        Mat4::perspective_lh(self.fov, self.aspect, self.clip.near, self.clip.far)
     }
 }
