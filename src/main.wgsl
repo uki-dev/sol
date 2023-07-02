@@ -8,15 +8,7 @@ const SHADOW_MAX_DISTANCE = 8.;
 const LIGHT_DIRECTION = vec3<f32>(.5, 1., -.3);
 
 struct Uniforms {
-    // width: u32,
-    // height: u32,
-    // depth: u32,
     camera_position: vec3<f32>,
-    // view: mat4x4<f32>,
-    // projection: mat4x4<f32>,
-    // view_projection: mat4x4<f32>,
-    // inverse_view: mat4x4<f32>,
-    // inverse_projection: mat4x4<f32>,
     inverse_view_projection: mat4x4<f32>,
 }
 
@@ -74,7 +66,7 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
         if distance <= EPSILON {
             let normal = normal(position);
             let diffuse = max(dot(normal, light_direction), 0.);
-            return vec4<f32>(1.0, 0.0, 1.0, 1.0);
+            return vec4<f32>(vec3<f32>(1.) * diffuse, 1.0);
         }
     }
     return vec4<f32>(ray_direction, 1.);
@@ -183,13 +175,6 @@ fn cube(position: vec3<f32>, extents: vec3<f32>) -> f32 {
 fn plane_y_infinite(position: vec3<f32>) -> f32 {
     return position.y;
 }
-
-// fn cube(position: vec3<f32>, dimensions: vec3<f32>) -> f32 {
-//     let x: f32 = abs(position.x) - dimensions.x;
-//     let y: f32 = abs(position.y) - dimensions.y;
-//     let z: f32 = abs(position.z) - dimensions.z;
-//     return min(min(x, y), z);
-// }
 
 fn sharp_union(a: f32, b: f32) -> f32 { return min(a, b); }
 

@@ -24,19 +24,8 @@ mod orbit_camera;
 #[repr(C)]
 #[derive(Default, Copy, Clone)]
 struct Uniforms {
-    // width: u32,
-    // _pad1: [u32; 3],
-    // height: u32,
-    // _pad2: [u32; 3],
-    // depth: u32,
-    // _pad3: [u32; 3],
     camera_position: [f32; 3],
-    _pad: f32,
-    // view: [f32; 4 * 4],
-    // projection: [f32; 4 * 4],
-    // view_projection: [f32; 4 * 4],
-    // inverse_view: [f32; 4 * 4],
-    // inverse_projection: [f32; 4 * 4],
+    _padding: f32,
     inverse_view_projection: [f32; 4 * 4],
 }
 
@@ -179,7 +168,6 @@ async fn async_main() {
 
     let mut camera = Camera::new();
     camera.position.z = -5.;
-    // camera.rotation = Quat::from_axis_angle(Vec3::X, -std::f32::consts::PI / 4.);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -193,13 +181,12 @@ async fn async_main() {
                 let normalized_mouse_x = position.x as f32 / window_size.width as f32;
                 let normalized_mouse_y = position.y as f32 / window_size.height as f32;
 
-                let rotation_x = normalized_mouse_x * std::f32::consts::PI * 2.0;
-                let rotation_y = -normalized_mouse_y * std::f32::consts::PI * 2.0;
+                let rotation_x = (normalized_mouse_y * 2. - 1.) * std::f32::consts::PI;
+                let rotation_y = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
 
-                // camera.rotation = Rotor3::from_euler_angles(0., rotation_x, rotation_y);
-                camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_y)
-                    * Quat::from_axis_angle(Vec3::Y, rotation_x);
-                // camera.position = camera.rotation * Vec3::new(0., 0., -16.);
+                camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
+                    * Quat::from_axis_angle(Vec3::Y, rotation_y);
+                camera.position = camera.rotation * Vec3::new(0., 0., -16.);
 
                 window.request_redraw();
             }
@@ -221,13 +208,13 @@ async fn async_main() {
                     // width: simulation.width,
                     // height: simulation.height,
                     // depth: simulation.depth,
-                    camera_position: camera.position.to_array().clone(),
+                    camera_position: camera.position.to_array(),
                     // view: camera.view().as_array().clone(),
                     // projection: camera.projection().as_array().clone(),
                     // view_projection: (camera.projection() * camera.view()).as_array().clone(),
-                    // inverse_view: camera.view().inversed().as_array().clone(),
-                    // inverse_projection: camera.projection().inversed().as_array().clone(),
-                    inverse_view_projection: (camera.view() * camera.projection())
+                    // inverse_view: camera.view().inverse().to_cols_array(),
+                    // inverse_projection: camera.projection().inverse().to_cols_array(),
+                    inverse_view_projection: (camera.projection() * camera.view())
                         .inverse()
                         .to_cols_array()
                         .clone(),
