@@ -1,7 +1,7 @@
 const EPSILON = .0001;
 
-const STEP_SIZE = .001;
-const MAX_DISTANCE = 32.;
+const STEP_SIZE = .01;
+const MAX_DISTANCE = 16.;
 const SHADOW_STEP_SIZE = .001;
 const SHADOW_MAX_DISTANCE = 8.;
 
