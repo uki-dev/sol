@@ -2,7 +2,7 @@ const EPSILON = .0001;
 
 const STEP_SIZE = .01;
 const MAX_DISTANCE = 16.;
-const SHADOW_STEP_SIZE = .001;
+const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
 
 const LIGHT_DIRECTION = vec3<f32>(.5, 1., -.3);
@@ -91,9 +91,12 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     let ray_direction = normalize((uniforms.inverse_view_projection * vec4<f32>(ndc, 1., 1.)).xyz);
     let ray_origin = uniforms.camera_position;
     let light_direction = normalize(LIGHT_DIRECTION);
-    for (var step: f32 = 0.; step < MAX_DISTANCE; step += STEP_SIZE) {
-        let position = ray_origin + ray_direction * step;
-        let distance = map(position);
+    var position = ray_origin;
+    var distance: f32 = map(position);
+    for (var step: f32 = 0.; step < MAX_DISTANCE; step += distance) {
+        position += ray_direction * distance;
+        let newDistance: f32 = map(position);
+        distance = newDistance;
         if distance <= EPSILON {
             let normal = normal(position);
             let diffuse = max(dot(normal, light_direction), 0.);
@@ -132,7 +135,7 @@ fn sample_grid(position: vec3<f32>) -> GridSample {
 
 fn grid_sdf(position: vec3<f32>) -> f32 {
     let sample = sample_grid(position);
-    var distance = 1.; //TODO: Replace with grid cell size
+    var distance = 0.5; //TODO: Replace with grid cell size
     for (var x = -1.; x <= 1.; x += 1.) {
         for (var y = -1.; y <= 1.; y += 1.) {
             for (var z = -1.; z <= 1.; z += 1.) {
