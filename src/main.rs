@@ -158,9 +158,9 @@ async fn async_main() {
     let mut surface_configuration = SurfaceConfiguration {
         usage: TextureUsages::RENDER_ATTACHMENT,
         format: surface_formats,
-        width: 1,
-        height: 1,
-        present_mode: PresentMode::AutoNoVsync,
+        width: window.inner_size().width,
+        height: window.inner_size().height,
+        present_mode: PresentMode::AutoVsync,
         alpha_mode: surface_capabilities.alpha_modes[0],
         view_formats: vec![],
     };
