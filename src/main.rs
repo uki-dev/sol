@@ -160,8 +160,12 @@ async fn async_main() {
         view_formats: vec![],
     };
 
+    let mut distance = (simulation
+        .width()
+        .max(simulation.height())
+        .max(simulation.depth()) as f32);
     let mut camera = Camera::new();
-    camera.position = camera.rotation * Vec3::new(0., 0., -(simulation.width() as f32));
+    camera.position = camera.rotation * Vec3::new(0., 0., -distance);
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -180,8 +184,21 @@ async fn async_main() {
 
                 camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
                     * Quat::from_axis_angle(Vec3::Y, rotation_y);
-                camera.position = camera.rotation * Vec3::new(0., 0., -(simulation.width() as f32));
+                camera.position = camera.rotation * Vec3::new(0., 0., -distance);
 
+                window.request_redraw();
+            }
+            Event::WindowEvent {
+                event: WindowEvent::MouseWheel { delta, .. },
+                ..
+            } => {
+                match delta {
+                    winit::event::MouseScrollDelta::LineDelta(_, y) => {
+                        distance -= y;
+                    }
+                    winit::event::MouseScrollDelta::PixelDelta(delta) => {}
+                }
+                camera.position = camera.rotation * Vec3::new(0., 0., -distance);
                 window.request_redraw();
             }
             Event::WindowEvent {
