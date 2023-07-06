@@ -1,61 +1,33 @@
 const EPSILON = .0001;
 
 const STEP_SIZE = .01;
-const MAX_DISTANCE = 16.;
+const MAX_DISTANCE = 32.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
 
 const LIGHT_DIRECTION = vec3<f32>(.5, 1., -.3);
 
-// var<private> neighbours: array<vec3<f32>, 14> = array<vec3<f32>, 14>(
-//     // left
-//     vec3<f32>(-1., .0, .0),
-//     // right
-//     vec3<f32>(1., .0, .0),
-//     // bottom
-//     vec3<f32>(.0, -1., .0),
-//     // top
-//     vec3<f32>(.0, 1., .0),
-//     // back
-//     vec3<f32>(.0, .0, -1.),
-//     // front
-//     vec3<f32>(.0, .0, 1.),
-//     // back bottom left 
-//     vec3<f32>(-1., -1., -1.),
-//     // back bottom right 
-//     vec3<f32>(1., -1., -1.),
-//     // back top right 
-//     vec3<f32>(1., 1., -1.),
-//     // back top left 
-//     vec3<f32>(-1., 1., -1.),
-//     // front bottom left 
-//     vec3<f32>(-1., -1., 1.),
-//     // front bottom right 
-//     vec3<f32>(1., -1., 1.),
-//     // front top right 
-//     vec3<f32>(1., 1., 1.),
-//     // front top left 
-//     vec3<f32>(-1., 1., 1.)
-// );
+struct Uniforms {
+    width: u32,
+    height: u32,
+    depth: u32,
+    camera_position: vec3<f32>,
+    inverse_view_projection: mat4x4<f32>,
+}
+
+@group(0)
+@binding(0)
+var<uniform> uniforms: Uniforms;
 
 const AIR = 0u;
 const WATER = 1u;
 const SAND = 2u;
 const SOIL = 3u;
 
-struct Uniforms {
-    camera_position: vec3<f32>,
-    inverse_view_projection: mat4x4<f32>,
-}
-
 struct Cell {
     material: u32,
     // velocity: vec3<f32>,
 }
-
-@group(0)
-@binding(0)
-var<uniform> uniforms: Uniforms;
 
 @group(0)
 @binding(1)
@@ -119,30 +91,32 @@ fn sample_grid(position: vec3<f32>) -> GridSample {
     sample.cell = empty_cell;
 
     // map to grid space and sample cell
-    let half_size = vec3<f32>(8., 8., 8.) * .5;
-    let grid_position = position + half_size;
+    let dimensions = vec3<u32>(uniforms.width, uniforms.height, uniforms.depth);
+    let extents = vec3<f32>(dimensions) * .5;
+    let grid_position = position + extents;
     let cell_position = vec3<u32>(floor(grid_position));
-    if all(grid_position >= vec3<f32>(0., 0., 0.)) && all(grid_position < vec3<f32>(8., 8., 8.)) {
+    if all(grid_position >= vec3<f32>(0., 0., 0.)) && all(grid_position < vec3<f32>(dimensions)) {
         // x + y * width + z * width * height
-        let cell_index = cell_position.x + cell_position.y * 8u + cell_position.z * 8u * 8u;
+        let cell_index = cell_position.x + cell_position.y * uniforms.width + cell_position.z * uniforms.width * uniforms.height;
         let cell = cell_grid[cell_index];
         sample.cell = cell;
     }
 
-    sample.position = vec3<f32>(cell_position) - half_size + 0.5;
+    sample.position = vec3<f32>(cell_position) - extents + 0.5;
     return sample;
 }
 
 fn grid_sdf(position: vec3<f32>) -> f32 {
     let sample = sample_grid(position);
+    let extents = 3.;
     var distance = 0.5; //TODO: Replace with grid cell size
-    for (var x = -1.; x <= 1.; x += 1.) {
-        for (var y = -1.; y <= 1.; y += 1.) {
-            for (var z = -1.; z <= 1.; z += 1.) {
+    for (var x = -extents; x <= extents; x += 1.) {
+        for (var y = -extents; y <= extents; y += 1.) {
+            for (var z = -extents; z <= extents; z += 1.) {
                 let offset = vec3<f32>(x, y, z);
                 let sample = sample_grid(position + offset);
                 if sample.cell.material != AIR {
-                    distance = smooth_union(distance, sphere_relative(position, sample.position, 0.5), 1.);
+                    distance = smooth_union(distance, sphere_relative(position, sample.position, 0.5), 2.);
                 }
             }
         }

@@ -3,46 +3,98 @@ use std::{borrow::Cow, mem::size_of};
 // use ultraviolet::Vec3;
 use wgpu::{
     BindGroup, Buffer, BufferAsyncError, BufferDescriptor, BufferUsages, ComputePipeline, Device,
-    Queue,
+    PipelineLayoutDescriptor, Queue,
 };
 
 #[path = "cell.rs"]
 mod cell;
 use cell::Cell;
 
-pub struct SimulationDescriptor {
-    /// number of cells within x axis of the discrete simulation grid
+#[repr(C)]
+#[derive(Default, Copy, Clone)]
+struct Uniforms {
     pub width: u32,
-    /// number of cells within y axis of the discrete simulation grid
     pub height: u32,
-    /// number of cells within z axis of the discrete simulation grid
     pub depth: u32,
+    pub _padding_0: u32,
 }
+
+unsafe impl bytemuck::Pod for Uniforms {}
+unsafe impl bytemuck::Zeroable for Uniforms {}
 
 pub struct Simulation {
     /// number of cells within x axis of the discrete simulation grid
-    pub width: u32,
+    width: u32,
     /// number of cells within y axis of the discrete simulation grid
-    pub height: u32,
+    height: u32,
     /// number of cells within z axis of the discrete simulation grid
-    pub depth: u32,
+    depth: u32,
 
-    staging_buffer: Buffer,
+    /// denotes whether `uniform_buffer` is dirty and needs updating
+    dirty: bool,
+
+    uniform_buffer: Buffer,
     pub storage_buffer: Buffer,
+    staging_buffer: Buffer,
     compute_pipeline: ComputePipeline,
     bind_group: BindGroup,
 }
 
 impl Drop for Simulation {
     fn drop(&mut self) {
+        self.uniform_buffer.destroy();
         self.staging_buffer.destroy();
         self.storage_buffer.destroy();
     }
 }
 
 impl Simulation {
-    pub fn new(descriptor: &SimulationDescriptor, device: &Device) -> Self {
-        let (width, height, depth) = (descriptor.width, descriptor.height, descriptor.depth);
+    pub fn width(&self) -> u32 {
+        return self.width;
+    }
+
+    pub fn height(&self) -> u32 {
+        return self.height;
+    }
+
+    pub fn depth(&self) -> u32 {
+        return self.depth;
+    }
+
+    pub fn set_dimensions(&mut self, width: u32, height: u32, depth: u32, device: &Device) {
+        if self.width != width || self.height != height || self.depth != depth {
+            self.dirty = true;
+        }
+        self.width = width;
+        self.height = height;
+        self.depth = depth;
+
+        self.storage_buffer.destroy();
+        self.staging_buffer.destroy();
+
+        let size = (size_of::<Cell>() as u32 * width * height * depth) as u64;
+
+        let storage_buffer = device.create_buffer(&BufferDescriptor {
+            size,
+            label: Some("Simulation::storage_buffer"),
+            usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
+            mapped_at_creation: false,
+        });
+
+        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            size,
+            label: None,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        self.storage_buffer = storage_buffer;
+        self.staging_buffer = staging_buffer;
+
+        // TODO: copy contents of old buffer
+    }
+
+    pub fn new(width: u32, height: u32, depth: u32, device: &Device) -> Self {
         let size = (size_of::<Cell>() as u32 * width * height * depth) as u64;
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -50,17 +102,10 @@ impl Simulation {
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("simulation.wgsl"))),
         });
 
-        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
-            layout: None,
-            module: &shader_module,
-            entry_point: "main",
-        });
-
-        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            size,
-            label: None,
-            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+        let uniform_buffer: wgpu::Buffer = device.create_buffer(&BufferDescriptor {
+            label: Some("uniforms"),
+            size: size_of::<Uniforms>() as u64,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
 
@@ -71,34 +116,99 @@ impl Simulation {
             mapped_at_creation: false,
         });
 
-        let bind_group_layout = compute_pipeline.get_bind_group_layout(0);
+        let staging_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            size,
+            label: None,
+            usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+            ],
+        });
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: storage_buffer.as_entire_binding(),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: storage_buffer.as_entire_binding(),
+                },
+            ],
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[&bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: None,
+            layout: Some(&pipeline_layout),
+            module: &shader_module,
+            entry_point: "main",
         });
 
         Simulation {
-            width: descriptor.width,
-            height: descriptor.height,
-            depth: descriptor.depth,
-            staging_buffer,
+            width,
+            height,
+            depth,
+            uniform_buffer,
             storage_buffer,
+            staging_buffer,
             compute_pipeline,
             bind_group,
+            dirty: true,
         }
     }
 
-    pub fn dispatch(&self, device: &Device, queue: &Queue) {
-        let (staging_buffer, storage_buffer, compute_pipeline, bind_group) = (
-            &self.staging_buffer,
+    pub fn dispatch(&mut self, device: &Device, queue: &Queue) {
+        let (uniform_buffer, storage_buffer, staging_buffer, compute_pipeline, bind_group) = (
+            &self.uniform_buffer,
             &self.storage_buffer,
+            &self.staging_buffer,
             &self.compute_pipeline,
             &self.bind_group,
         );
+
+        if self.dirty {
+            let uniforms = Uniforms {
+                width: self.width,
+                height: self.height,
+                depth: self.depth,
+                ..Default::default()
+            };
+            queue.write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+            self.dirty = false;
+        }
 
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
@@ -109,8 +219,9 @@ impl Simulation {
             compute_pass.set_bind_group(0, bind_group, &[]);
             compute_pass.dispatch_workgroups(self.width, self.height, self.depth);
         }
-        let size = (size_of::<Cell>() as u32 * self.width * self.height * self.depth) as u64;
-        encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
+        // let size = (size_of::<Cell>() as u32 * self.width * self.height * self.depth) as u64;
+        // TODO: we should avoid this unless we actually want to read back from it on the cpu
+        // encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
         queue.submit(Some(encoder.finish()));
     }
 

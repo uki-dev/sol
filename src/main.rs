@@ -16,14 +16,18 @@ use winit::{
 };
 
 mod engine;
+use engine::rendering::Camera;
 use engine::simulation::Simulation;
-use engine::{rendering::Camera, simulation::SimulationDescriptor};
 
 #[repr(C)]
 #[derive(Default, Copy, Clone)]
 struct Uniforms {
+    width: u32,
+    height: u32,
+    depth: u32,
+    _padding_0: u32,
     camera_position: [f32; 3],
-    _padding: f32,
+    _padding_1: f32,
     inverse_view_projection: [f32; 4 * 4],
 }
 
@@ -65,16 +69,8 @@ async fn async_main() {
     let surface_capabilities = surface.get_capabilities(&adapter);
     let surface_formats = surface_capabilities.formats[0];
 
-    let simulation = Simulation::new(
-        &SimulationDescriptor {
-            width: 8,
-            height: 8,
-            depth: 8,
-        },
-        &device,
-    );
+    let mut simulation = Simulation::new(32, 32, 32, &device);
     simulation.dispatch(&device, &queue);
-    let _ = simulation.receive(&device).await;
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: None,
@@ -165,7 +161,7 @@ async fn async_main() {
     };
 
     let mut camera = Camera::new();
-    camera.position.z = -10.;
+    camera.position = camera.rotation * Vec3::new(0., 0., -(simulation.width() as f32));
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
@@ -184,7 +180,7 @@ async fn async_main() {
 
                 camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
                     * Quat::from_axis_angle(Vec3::Y, rotation_y);
-                camera.position = camera.rotation * Vec3::new(0., 0., -10.);
+                camera.position = camera.rotation * Vec3::new(0., 0., -(simulation.width() as f32));
 
                 window.request_redraw();
             }
@@ -203,15 +199,10 @@ async fn async_main() {
             }
             Event::RedrawRequested(_) => {
                 let uniforms = Uniforms {
-                    // width: simulation.width,
-                    // height: simulation.height,
-                    // depth: simulation.depth,
+                    width: simulation.width(),
+                    height: simulation.height(),
+                    depth: simulation.depth(),
                     camera_position: camera.position.to_array(),
-                    // view: camera.view().as_array().clone(),
-                    // projection: camera.projection().as_array().clone(),
-                    // view_projection: (camera.projection() * camera.view()).as_array().clone(),
-                    // inverse_view: camera.view().inverse().to_cols_array(),
-                    // inverse_projection: camera.projection().inverse().to_cols_array(),
                     inverse_view_projection: (camera.projection() * camera.view())
                         .inverse()
                         .to_cols_array()
