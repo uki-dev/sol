@@ -1,6 +1,11 @@
 use futures::executor::block_on;
 use glam::{Quat, Vec3};
-use std::{borrow::Cow, mem::size_of, num::NonZeroU64};
+use std::{
+    borrow::Cow,
+    mem::size_of,
+    num::NonZeroU64,
+    time::{Duration, Instant},
+};
 use wgpu::{
     BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor, DeviceDescriptor, Features,
     FragmentState, Instance, Limits, LoadOp, MultisampleState, Operations,
@@ -70,7 +75,7 @@ async fn async_main() {
     let surface_formats = surface_capabilities.formats[0];
 
     let mut simulation = Simulation::new(32, 32, 32, &device);
-    simulation.dispatch(&device, &queue);
+    simulation.populate(&device, &queue);
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
         label: None,
@@ -160,15 +165,14 @@ async fn async_main() {
         view_formats: vec![],
     };
 
-    let mut distance = (simulation
-        .width()
-        .max(simulation.height())
-        .max(simulation.depth()) as f32);
+    let mut distance = 38.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
 
+    let mut last_simulation = Instant::now();
+
     event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
         match event {
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },
@@ -182,11 +186,9 @@ async fn async_main() {
                 let rotation_x = (normalized_mouse_y * 2. - 1.) * std::f32::consts::PI;
                 let rotation_y = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
 
-                camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
-                    * Quat::from_axis_angle(Vec3::Y, rotation_y);
-                camera.position = camera.rotation * Vec3::new(0., 0., -distance);
-
-                window.request_redraw();
+                // camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
+                //     * Quat::from_axis_angle(Vec3::Y, rotation_y);
+                // camera.position = camera.rotation * Vec3::new(0., 0., -distance);
             }
             Event::WindowEvent {
                 event: WindowEvent::MouseWheel { delta, .. },
@@ -199,7 +201,6 @@ async fn async_main() {
                     winit::event::MouseScrollDelta::PixelDelta(delta) => {}
                 }
                 camera.position = camera.rotation * Vec3::new(0., 0., -distance);
-                window.request_redraw();
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),
@@ -209,9 +210,16 @@ async fn async_main() {
                 surface_configuration.height = size.height;
 
                 camera.aspect = size.width as f32 / size.height as f32;
-                println!("aspect {}", camera.aspect);
 
                 surface.configure(&device, &surface_configuration);
+            }
+            Event::MainEventsCleared => {
+                let elapsed = last_simulation.elapsed();
+                if elapsed >= Duration::from_millis(200) {
+                    println!("simulation tick");
+                    simulation.simulate(&device, &queue);
+                    last_simulation = Instant::now();
+                }
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {

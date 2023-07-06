@@ -36,8 +36,11 @@ pub struct Simulation {
     uniform_buffer: Buffer,
     pub storage_buffer: Buffer,
     staging_buffer: Buffer,
-    compute_pipeline: ComputePipeline,
+
     bind_group: BindGroup,
+
+    populate_compute_pipeline: ComputePipeline,
+    simulate_compute_pipeline: ComputePipeline,
 }
 
 impl Drop for Simulation {
@@ -170,12 +173,21 @@ impl Simulation {
             push_constant_ranges: &[],
         });
 
-        let compute_pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: None,
-            layout: Some(&pipeline_layout),
-            module: &shader_module,
-            entry_point: "main",
-        });
+        let populate_compute_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                module: &shader_module,
+                entry_point: "populate",
+            });
+
+        let simulate_compute_pipeline =
+            device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: None,
+                layout: Some(&pipeline_layout),
+                module: &shader_module,
+                entry_point: "simulate",
+            });
 
         Simulation {
             width,
@@ -184,21 +196,14 @@ impl Simulation {
             uniform_buffer,
             storage_buffer,
             staging_buffer,
-            compute_pipeline,
             bind_group,
+            populate_compute_pipeline,
+            simulate_compute_pipeline,
             dirty: true,
         }
     }
 
-    pub fn dispatch(&mut self, device: &Device, queue: &Queue) {
-        let (uniform_buffer, storage_buffer, staging_buffer, compute_pipeline, bind_group) = (
-            &self.uniform_buffer,
-            &self.storage_buffer,
-            &self.staging_buffer,
-            &self.compute_pipeline,
-            &self.bind_group,
-        );
-
+    fn update(&mut self, queue: &Queue) {
         if self.dirty {
             let uniforms = Uniforms {
                 width: self.width,
@@ -206,26 +211,41 @@ impl Simulation {
                 depth: self.depth,
                 ..Default::default()
             };
-            queue.write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
+            queue.write_buffer(&self.uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
             self.dirty = false;
         }
+    }
 
+    fn dispatch(&self, device: &Device, queue: &Queue, pipeline: &ComputePipeline) {
         let mut encoder =
             device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
         {
             let mut compute_pass =
                 encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { label: None });
-            compute_pass.set_pipeline(compute_pipeline);
-            compute_pass.set_bind_group(0, bind_group, &[]);
+            compute_pass.set_pipeline(pipeline);
+            compute_pass.set_bind_group(0, &self.bind_group, &[]);
             compute_pass.dispatch_workgroups(self.width, self.height, self.depth);
         }
-        // let size = (size_of::<Cell>() as u32 * self.width * self.height * self.depth) as u64;
-        // TODO: we should avoid this unless we actually want to read back from it on the cpu
-        // encoder.copy_buffer_to_buffer(&storage_buffer, 0, &staging_buffer, 0, size);
         queue.submit(Some(encoder.finish()));
     }
 
-    pub async fn receive(&self, device: &Device) -> Result<(), BufferAsyncError> {
+    pub fn populate(&mut self, device: &Device, queue: &Queue) {
+        self.update(queue);
+        self.dispatch(device, queue, &self.populate_compute_pipeline);
+    }
+
+    pub fn simulate(&mut self, device: &Device, queue: &Queue) {
+        self.update(queue);
+        self.dispatch(device, queue, &self.simulate_compute_pipeline);
+    }
+
+    pub async fn receive(&self, device: &Device, queue: &Queue) -> Result<(), BufferAsyncError> {
+        let size = (size_of::<Cell>() as u32 * self.width * self.height * self.depth) as u64;
+        let mut encoder =
+            device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+        encoder.copy_buffer_to_buffer(&self.storage_buffer, 0, &self.staging_buffer, 0, size);
+        queue.submit(Some(encoder.finish()));
+
         let staging_buffer = &self.staging_buffer;
         let buffer_slice = staging_buffer.slice(..);
         let (sender, receiver) = oneshot::channel();
