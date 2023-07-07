@@ -1,7 +1,7 @@
 const EPSILON = .0001;
 
 const STEP_SIZE = .01;
-const MAX_DISTANCE = 32.;
+const MAX_DISTANCE = 256.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
 
@@ -107,16 +107,18 @@ fn sample_grid(position: vec3<f32>) -> GridSample {
 }
 
 fn grid_sdf(position: vec3<f32>) -> f32 {
-    let sample = sample_grid(position);
     let extents = 3.;
     var distance = 0.5; //TODO: Replace with grid cell size
-    for (var x = -extents; x <= extents; x += 1.) {
-        for (var y = -extents; y <= extents; y += 1.) {
-            for (var z = -extents; z <= extents; z += 1.) {
-                let offset = vec3<f32>(x, y, z);
-                let sample = sample_grid(position + offset);
-                if sample.cell.material != AIR {
-                    distance = smooth_union(distance, sphere_relative(position, sample.position, 0.5), 2.);
+    let sample = sample_grid(position);
+    if sample.cell.material != AIR {
+        for (var x = -extents; x <= extents; x += 1.) {
+            for (var y = -extents; y <= extents; y += 1.) {
+                for (var z = -extents; z <= extents; z += 1.) {
+                    let offset = vec3<f32>(x, y, z);
+                    let sample = sample_grid(position + offset);
+                    if sample.cell.material != AIR {
+                        distance = smooth_union(distance, sphere_relative(position, sample.position, 0.5), 2.);
+                    }
                 }
             }
         }

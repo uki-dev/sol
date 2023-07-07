@@ -26,7 +26,7 @@ impl Camera {
             fov: PI / 3.,
             clip: Clip {
                 near: 0.1,
-                far: 128.0,
+                far: 1000.0,
             },
             ..Default::default()
         }

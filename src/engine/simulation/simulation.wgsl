@@ -31,22 +31,43 @@ fn populate(@builtin(global_invocation_id) position: vec3<u32>) {
     buffer[index].material = select(AIR, SAND, distance <= min(min(extents.x, extents.y), extents.z));
 }
 
+@compute
+@workgroup_size(1)
+fn simulate(@builtin(global_invocation_id) position: vec3<u32>) {
+    let index = index(position);
+    let cell = buffer[index];
+    if cell.material == SAND {
+        sand(position, index);
+    }
+}
+
 fn index(position: vec3<u32>) -> u32 {
     return position.x + position.y * uniforms.width + position.z * uniforms.width * uniforms.height;
 }
 
-@compute
-@workgroup_size(1)
-fn simulate(@builtin(global_invocation_id) position: vec3<u32>) {
+fn sand(position: vec3<u32>, index: u32) {
+    var neighbours: array<vec3<i32>, 9> = array<vec3<i32>, 9>(
+        vec3<i32>(0, -1, 0),
+        vec3<i32>(-1, -1, 0),
+        vec3<i32>(1, -1, 0),
+        vec3<i32>(0, -1, -1),
+        vec3<i32>(0, -1, 1),
+        vec3<i32>(-1, -1, -1),
+        vec3<i32>(1, -1, 1),
+        vec3<i32>(1, -1, -1),
+        vec3<i32>(1, -1, 1),
+    );
+
     let dimensions = vec3<u32>(uniforms.width, uniforms.height, uniforms.depth);
-    let cell = buffer[index(position)];
-    if cell.material == SAND {
-        let nextPosition = vec3<u32>(vec3<i32>(position) + vec3<i32>(0, -1, 0));
-        if all(nextPosition >= vec3<u32>(0u, 0u, 0u)) && all(nextPosition < dimensions) {
-            let nextCell = buffer[index(nextPosition)];
-            if nextCell.material == AIR {
-                buffer[index(nextPosition)].material = SAND;
-                buffer[index(position)].material = AIR;
+    for (var i = 0; i < 9; i += 1) {
+        let neighbour_position = vec3<u32>(vec3<i32>(position) + neighbours[i]);
+        if all(neighbour_position >= vec3<u32>(0u, 0u, 0u)) && all(neighbour_position < dimensions) {
+            let neighbour_index = index(neighbour_position);
+            let neighbour = buffer[index(neighbour_position)];
+            if neighbour.material == AIR {
+                buffer[neighbour_index].material = SAND;
+                buffer[index].material = AIR;
+                return;
             }
         }
     }

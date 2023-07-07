@@ -47,6 +47,7 @@ async fn async_main() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("🌎")
+        // .with_fullscreen(Some(winit::window::Fullscreen::Borderless(None)))
         .build(&event_loop)
         .unwrap();
 
@@ -74,7 +75,7 @@ async fn async_main() {
     let surface_capabilities = surface.get_capabilities(&adapter);
     let surface_formats = surface_capabilities.formats[0];
 
-    let mut simulation = Simulation::new(32, 32, 32, &device);
+    let mut simulation = Simulation::new(256, 256, 256, &device);
     simulation.populate(&device, &queue);
 
     let shader = device.create_shader_module(ShaderModuleDescriptor {
@@ -165,9 +166,10 @@ async fn async_main() {
         view_formats: vec![],
     };
 
-    let mut distance = 38.;
+    let mut distance = 256.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
+    camera.position.y = -32.;
 
     let mut last_simulation = Instant::now();
 
@@ -214,8 +216,9 @@ async fn async_main() {
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
+                // limited to 60fps
                 let elapsed = last_simulation.elapsed();
-                if elapsed >= Duration::from_millis(200) {
+                if elapsed >= Duration::from_millis(16) {
                     println!("simulation tick");
                     simulation.simulate(&device, &queue);
                     last_simulation = Instant::now();
