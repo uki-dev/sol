@@ -1,18 +1,9 @@
 use futures::executor::block_on;
 use glam::{Quat, Vec3};
-use std::{
-    borrow::Cow,
-    mem::size_of,
-    num::NonZeroU64,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use wgpu::{
-    BufferDescriptor, BufferUsages, Color, CommandEncoderDescriptor, DeviceDescriptor, Features,
-    FragmentState, Instance, Limits, LoadOp, MultisampleState, Operations,
-    PipelineLayoutDescriptor, PowerPreference, PresentMode, PrimitiveState,
-    RenderPassColorAttachment, RenderPassDescriptor, RenderPipelineDescriptor,
-    RequestAdapterOptions, ShaderModuleDescriptor, SurfaceConfiguration, TextureUsages,
-    TextureViewDescriptor, VertexState,
+    DeviceDescriptor, Features, Instance, Limits, PowerPreference, PresentMode,
+    RequestAdapterOptions, SurfaceConfiguration, TextureUsages,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -20,24 +11,12 @@ use winit::{
     window::WindowBuilder,
 };
 
-mod engine;
-use engine::rendering::Camera;
-use engine::simulation::Simulation;
+mod simulation;
+use simulation::Simulation;
 
-#[repr(C)]
-#[derive(Default, Copy, Clone)]
-struct Uniforms {
-    width: u32,
-    height: u32,
-    depth: u32,
-    _padding_0: u32,
-    camera_position: [f32; 3],
-    _padding_1: f32,
-    inverse_view_projection: [f32; 4 * 4],
-}
-
-unsafe impl bytemuck::Pod for Uniforms {}
-unsafe impl bytemuck::Zeroable for Uniforms {}
+mod visualisation;
+use visualisation::Camera;
+use visualisation::Visualisation;
 
 fn main() {
     block_on(async_main());
@@ -74,88 +53,6 @@ async fn async_main() {
         .expect("Failed to request device");
     let surface_capabilities = surface.get_capabilities(&adapter);
     let surface_formats = surface_capabilities.formats[0];
-
-    let mut simulation = Simulation::new(256, 256, 256, &device);
-    simulation.populate(&device, &queue);
-
-    let shader = device.create_shader_module(ShaderModuleDescriptor {
-        label: None,
-        source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("main.wgsl"))),
-    });
-
-    let uniform_buffer: wgpu::Buffer = device.create_buffer(&BufferDescriptor {
-        label: Some("uniforms"),
-        size: size_of::<Uniforms>() as u64,
-        usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        mapped_at_creation: false,
-    });
-
-    let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: None,
-        entries: &[
-            wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-            wgpu::BindGroupLayoutEntry {
-                binding: 1,
-                visibility: wgpu::ShaderStages::FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            },
-        ],
-    });
-
-    let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-        label: None,
-        layout: &bind_group_layout,
-        entries: &[
-            wgpu::BindGroupEntry {
-                binding: 0,
-                resource: uniform_buffer.as_entire_binding(),
-            },
-            wgpu::BindGroupEntry {
-                binding: 1,
-                resource: simulation.storage_buffer.as_entire_binding(),
-            },
-        ],
-    });
-
-    let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-        label: None,
-        bind_group_layouts: &[&bind_group_layout],
-        push_constant_ranges: &[],
-    });
-
-    let render_pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-        label: None,
-        layout: Some(&pipeline_layout),
-        vertex: VertexState {
-            module: &shader,
-            entry_point: "vertex",
-            buffers: &[],
-        },
-        fragment: Some(FragmentState {
-            module: &shader,
-            entry_point: "fragment",
-            targets: &[Some(surface_formats.into())],
-        }),
-        primitive: PrimitiveState::default(),
-        depth_stencil: None,
-        multisample: MultisampleState::default(),
-        multiview: None,
-    });
-
     let mut surface_configuration = SurfaceConfiguration {
         usage: TextureUsages::RENDER_ATTACHMENT,
         format: surface_formats,
@@ -166,10 +63,15 @@ async fn async_main() {
         view_formats: vec![],
     };
 
+    let mut simulation = Simulation::new(256, 256, 256, &device);
+    simulation.populate(&device, &queue);
+
     let mut distance = 256.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
     camera.position.y = -32.;
+
+    let mut visualisation = Visualisation::new(&device, surface_formats.into(), &simulation);
 
     let mut last_simulation = Instant::now();
 
@@ -188,9 +90,9 @@ async fn async_main() {
                 let rotation_x = (normalized_mouse_y * 2. - 1.) * std::f32::consts::PI;
                 let rotation_y = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
 
-                // camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
-                //     * Quat::from_axis_angle(Vec3::Y, rotation_y);
-                // camera.position = camera.rotation * Vec3::new(0., 0., -distance);
+                camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
+                    * Quat::from_axis_angle(Vec3::Y, rotation_y);
+                camera.position = camera.rotation * Vec3::new(0., 0., -distance);
             }
             Event::WindowEvent {
                 event: WindowEvent::MouseWheel { delta, .. },
@@ -208,11 +110,10 @@ async fn async_main() {
                 event: WindowEvent::Resized(size),
                 ..
             } => {
-                surface_configuration.width = size.width;
-                surface_configuration.height = size.height;
-
                 camera.aspect = size.width as f32 / size.height as f32;
 
+                surface_configuration.width = size.width;
+                surface_configuration.height = size.height;
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
@@ -226,51 +127,7 @@ async fn async_main() {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-                let uniforms = Uniforms {
-                    width: simulation.width(),
-                    height: simulation.height(),
-                    depth: simulation.depth(),
-                    camera_position: camera.position.to_array(),
-                    inverse_view_projection: (camera.projection() * camera.view())
-                        .inverse()
-                        .to_cols_array()
-                        .clone(),
-                    ..Default::default()
-                };
-
-                queue.write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
-
-                let current_texture = surface
-                    .get_current_texture()
-                    .expect("Failed to get current texture");
-
-                let view = current_texture
-                    .texture
-                    .create_view(&TextureViewDescriptor::default());
-
-                let mut command_encoder =
-                    device.create_command_encoder(&CommandEncoderDescriptor { label: None });
-                {
-                    let mut render_pass =
-                        command_encoder.begin_render_pass(&RenderPassDescriptor {
-                            label: None,
-                            color_attachments: &[Some(RenderPassColorAttachment {
-                                view: &view,
-                                resolve_target: None,
-                                ops: Operations {
-                                    load: LoadOp::Clear(Color::TRANSPARENT),
-                                    store: true,
-                                },
-                            })],
-                            depth_stencil_attachment: None,
-                        });
-                    render_pass.set_bind_group(0, &bind_group, &[]);
-                    render_pass.set_pipeline(&render_pipeline);
-                    render_pass.draw(0..6, 0..1);
-                }
-
-                queue.submit(Some(command_encoder.finish()));
-                current_texture.present();
+                visualisation.visualise(&device, &queue, &surface, &simulation, &camera);
             }
             // TODO: explicity destroy GPU resources (although many operating systems will do this automatically its not good practice to rely on)
             Event::WindowEvent {
