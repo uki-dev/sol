@@ -64,18 +64,44 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     let ray_origin = uniforms.camera_position;
     let light_direction = normalize(LIGHT_DIRECTION);
     var position = ray_origin;
-    var distance: f32 = map(position);
+    var distance: f32 = map(position).distance;
+    var hit: SurfaceHit;
+    hit.material = AIR;
     for (var step: f32 = 0.; step < MAX_DISTANCE; step += distance) {
         position += ray_direction * distance;
-        let newDistance: f32 = map(position);
-        distance = newDistance;
+        let result: SDFResult = map(position);
+        distance = result.distance;
         if distance <= EPSILON {
             let normal = normal(position);
-            let diffuse = max(dot(normal, light_direction), 0.);
-            return vec4<f32>(vec3<f32>(1.) * diffuse, 1.0);
+            hit.normal = normal;
+            hit.position = position;
+            hit.material = result.nearest_surface_material;
+            break;
         }
     }
-    return vec4<f32>(ray_direction, 1.);
+
+    // Shading
+    if (hit.material == AIR) {
+        // Only the material property of hit is defined if no hit occurs
+        return vec4<f32>(ray_direction, 1.);
+    } else if (hit.material == SAND) {
+        let sand_color = vec3<f32>(0.9, 0.7, 0.3);
+        let illumination = max(dot(hit.normal, light_direction), 0.);
+        return vec4<f32>(diffuse_illumination(sand_color, vec3<f32>(illumination)), 1.);
+    } else {
+        // Should not reach here once all materials are defined
+        return vec4<f32>(0.);
+    }
+}
+
+fn diffuse_illumination(albedo: vec3<f32>, illumination: vec3<f32>) -> vec3<f32> {
+    return albedo * illumination;
+}
+
+struct SurfaceHit {
+    normal: vec3<f32>,
+    position: vec3<f32>,
+    material: u32,
 }
 
 struct GridSample {
@@ -126,16 +152,26 @@ fn grid_sdf(position: vec3<f32>) -> f32 {
     return distance;
 }
 
-fn map(position: vec3<f32>) -> f32 {
-    return grid_sdf(position);
+struct SDFResult {
+    distance: f32,
+    nearest_surface_material: u32,
+}
+
+fn map(position: vec3<f32>) -> SDFResult {
+    let distance = grid_sdf(position);
+    var result: SDFResult;
+    result.distance = distance;
+    result.nearest_surface_material = SAND;
+    return result;
+
 }
 
 fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {
     // return position.y;
     let start: vec3<f32> = position + (normal(position) * .01);
     for (var step: f32 = .01; step < SHADOW_MAX_DISTANCE; step += SHADOW_STEP_SIZE) {
-        let distance = map(start + (direction * step));
-        if distance < EPSILON {
+        let result = map(start + (direction * step));
+        if result.distance < EPSILON {
             return .1;
         }
     }
@@ -184,12 +220,12 @@ fn smooth_intersection(a: f32, b: f32, k: f32) -> f32 {
 
 // numerical gradient estimation
 fn normal(position: vec3<f32>) -> vec3<f32> {
-    let a: f32 = map(position + vec3(EPSILON, 0., 0.));
-    let b: f32 = map(position - vec3(EPSILON, 0., 0.));
-    let c: f32 = map(position + vec3(0., EPSILON, 0.));
-    let d: f32 = map(position - vec3(0., EPSILON, 0.));
-    let e: f32 = map(position + vec3(0., 0., EPSILON));
-    let f: f32 = map(position - vec3(0., 0., EPSILON));
+    let a: f32 = map(position + vec3(EPSILON, 0., 0.)).distance;
+    let b: f32 = map(position - vec3(EPSILON, 0., 0.)).distance;
+    let c: f32 = map(position + vec3(0., EPSILON, 0.)).distance;
+    let d: f32 = map(position - vec3(0., EPSILON, 0.)).distance;
+    let e: f32 = map(position + vec3(0., 0., EPSILON)).distance;
+    let f: f32 = map(position - vec3(0., 0., EPSILON)).distance;
 
     // return the normalised gradient
     return normalize(vec3<f32>(
