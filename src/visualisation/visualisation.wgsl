@@ -67,6 +67,7 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     var distance: f32 = map(position).distance;
     var hit: SurfaceHit;
     hit.material = AIR;
+    hit.position = ray_origin + (ray_direction * MAX_DISTANCE);
     for (var step: f32 = 0.; step < MAX_DISTANCE; step += distance) {
         position += ray_direction * distance;
         let result: SDFResult = map(position);
@@ -80,11 +81,16 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
         }
     }
 
+    let distance_from_cam = distance(ray_origin, hit.position);
+    let distance_deriv = fwidth(distance_from_cam);
     // Shading
     if (hit.material == AIR) {
         // Only the material property of hit is defined if no hit occurs
         return vec4<f32>(ray_direction, 1.);
     } else if (hit.material == SAND) {
+        if (distance_deriv > 2.0) {
+            return vec4<f32>(0., 0., 0., 1.);
+        }
         let sand_color = vec3<f32>(0.9, 0.7, 0.3);
         let illumination = max(dot(hit.normal, light_direction), 0.);
         return vec4<f32>(diffuse_illumination(sand_color, vec3<f32>(illumination)), 1.);
