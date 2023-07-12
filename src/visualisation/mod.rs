@@ -1,4 +1,4 @@
 mod camera;
-mod visualisation;
 pub use camera::Camera;
+mod visualisation;
 pub use visualisation::Visualisation;
