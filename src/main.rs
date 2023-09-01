@@ -87,12 +87,14 @@ async fn async_main() {
                 let normalized_mouse_x = position.x as f32 / window_size.width as f32;
                 let normalized_mouse_y = position.y as f32 / window_size.height as f32;
 
-                let rotation_x = (normalized_mouse_y * 2. - 1.) * std::f32::consts::PI;
-                let rotation_y = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
+                let mut pitch = -(normalized_mouse_y * 2. - 1.) * std::f32::consts::PI;
+                let yaw = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
+                pitch = pitch.clamp(0., std::f32::consts::FRAC_PI_2);
+                
 
-                camera.rotation = Quat::from_axis_angle(Vec3::X, rotation_x)
-                    * Quat::from_axis_angle(Vec3::Y, rotation_y);
-                camera.position = camera.rotation * Vec3::new(0., 0., -distance);
+                camera.rotation = Quat::from_axis_angle(Vec3::Y, yaw)
+                    * Quat::from_axis_angle(Vec3::X, pitch);
+                camera.position = Vec3::new(0., -0., 0.) + camera.rotation * Vec3::new(0., 0., -distance);
             }
             Event::WindowEvent {
                 event: WindowEvent::MouseWheel { delta, .. },
@@ -100,11 +102,11 @@ async fn async_main() {
             } => {
                 match delta {
                     winit::event::MouseScrollDelta::LineDelta(_, y) => {
-                        distance -= y;
+                        distance -= y * 8.;
                     }
                     winit::event::MouseScrollDelta::PixelDelta(delta) => {}
                 }
-                camera.position = camera.rotation * Vec3::new(0., 0., -distance);
+                camera.position = Vec3::new(0., -0., 0.) + camera.rotation * Vec3::new(0., 0., -distance);
             }
             Event::WindowEvent {
                 event: WindowEvent::Resized(size),
