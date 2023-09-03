@@ -3,7 +3,7 @@ use glam::{Quat, Vec3};
 use std::time::{Duration, Instant};
 use wgpu::{
     DeviceDescriptor, Features, Instance, Limits, PowerPreference, PresentMode,
-    RequestAdapterOptions, SurfaceConfiguration, TextureUsages,
+    RequestAdapterOptions, SurfaceConfiguration, TextureUsages, TextureViewDescriptor,
 };
 use winit::{
     event::{Event, WindowEvent},
@@ -63,17 +63,22 @@ async fn async_main() {
         view_formats: vec![],
     };
 
-    let mut simulation = Simulation::new(256, 256, 256, &device);
+    let mut simulation = Simulation::new(32, 32, 32, &device);
     simulation.populate(&device, &queue);
 
-    let mut distance = 256.;
+    let mut distance = 8.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
-    camera.position.y = -32.;
 
-    let mut visualisation = Visualisation::new(&device, surface_formats.into(), &simulation);
+    let mut visualisation = Visualisation::new(&device, surface_formats.into(), &simulation.objects_buffer, &simulation.objects_length_buffer);
 
-    let mut last_simulation = Instant::now();
+    let mut last_tick = Instant::now();
+
+    // simulation.simulate(&device, &queue);
+    // simulation.readback_cells(&device, &queue).await;
+    simulation.map_cells_to_objects(&device, &queue);
+    // simulation.readback_objects(&device, &queue).await;
+    // simulation.readback_objects_length(&device, &queue).await;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -119,17 +124,22 @@ async fn async_main() {
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
-                // limited to 60fps
-                let elapsed = last_simulation.elapsed();
+                let elapsed = last_tick.elapsed();
                 if elapsed >= Duration::from_millis(16) {
-                    println!("simulation tick");
-                    simulation.simulate(&device, &queue);
-                    last_simulation = Instant::now();
+                    window.request_redraw();
+                    last_tick = Instant::now();
                 }
-                window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-                visualisation.visualise(&device, &queue, &surface, &simulation, &camera);
+
+                let current_texture = surface
+                    .get_current_texture()
+                    .expect("Failed to get current texture");
+                let view = current_texture
+                    .texture
+                    .create_view(&TextureViewDescriptor::default());
+                visualisation.visualise(&device, &queue, &view, &camera);
+                current_texture.present();
             }
             // TODO: explicity destroy GPU resources (although many operating systems will do this automatically its not good practice to rely on)
             Event::WindowEvent {

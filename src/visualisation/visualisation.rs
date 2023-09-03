@@ -6,21 +6,16 @@ use wgpu::{
     MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
     ShaderModuleDescriptor, ShaderSource, ShaderStages, Surface, TextureViewDescriptor,
-    VertexState,
+    VertexState, TextureView,
 };
 
 use super::Camera;
-use crate::simulation::Simulation;
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Default, Copy, Clone)]
 struct Uniforms {
-    width: u32,
-    height: u32,
-    depth: u32,
-    _padding_0: u32,
     camera_position: [f32; 3],
-    _padding_1: f32,
+    _padding: [u8; 4],
     inverse_view_projection: [f32; 4 * 4],
 }
 
@@ -33,15 +28,10 @@ pub struct Visualisation {
     render_pipeline: RenderPipeline,
 }
 
-struct Dimensions {
-    width: u32,
-    height: u32,
-}
-
 impl Visualisation {
-    pub fn new(device: &Device, target: ColorTargetState, simulation: &Simulation) -> Self {
+    pub fn new(device: &Device, target: ColorTargetState, objects_buffer: &Buffer, objects_length_buffer: &Buffer) -> Self {
         let (uniform_buffer, bind_group, render_pipeline) =
-            Self::initialise(device, target, simulation);
+            Self::initialise(device, target, objects_buffer, objects_length_buffer);
         Visualisation {
             uniform_buffer,
             bind_group,
@@ -52,7 +42,8 @@ impl Visualisation {
     fn initialise(
         device: &Device,
         target: ColorTargetState,
-        simulation: &Simulation,
+        objects_buffer: &Buffer,
+        objects_length_buffer: &Buffer
     ) -> (Buffer, BindGroup, RenderPipeline) {
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
@@ -89,6 +80,16 @@ impl Visualisation {
                     },
                     count: None,
                 },
+                BindGroupLayoutEntry {
+                    binding: 2,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
             ],
         });
 
@@ -102,7 +103,11 @@ impl Visualisation {
                 },
                 BindGroupEntry {
                     binding: 1,
-                    resource: simulation.storage_buffer.as_entire_binding(),
+                    resource: objects_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: objects_length_buffer.as_entire_binding(),
                 },
             ],
         });
@@ -139,8 +144,7 @@ impl Visualisation {
         &self,
         device: &Device,
         queue: &Queue,
-        surface: &Surface,
-        simulation: &Simulation,
+        view: &TextureView,
         camera: &Camera,
     ) {
         let (uniform_buffer, bind_group, render_pipeline) = (
@@ -150,9 +154,6 @@ impl Visualisation {
         );
 
         let uniforms = Uniforms {
-            width: simulation.width(),
-            height: simulation.height(),
-            depth: simulation.depth(),
             camera_position: camera.position.to_array(),
             inverse_view_projection: (camera.projection() * camera.view())
                 .inverse()
@@ -160,15 +161,7 @@ impl Visualisation {
                 .clone(),
             ..Default::default()
         };
-        queue.write_buffer(&uniform_buffer, 0, bytemuck::bytes_of(&uniforms));
-
-        let current_texture = surface
-            .get_current_texture()
-            .expect("Failed to get current texture");
-
-        let view = current_texture
-            .texture
-            .create_view(&TextureViewDescriptor::default());
+        queue.write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
 
         let mut command_encoder =
             device.create_command_encoder(&CommandEncoderDescriptor { label: None });
@@ -189,8 +182,6 @@ impl Visualisation {
             render_pass.set_bind_group(0, &bind_group, &[]);
             render_pass.draw(0..6, 0..1);
         }
-
         queue.submit(Some(command_encoder.finish()));
-        current_texture.present();
     }
 }
