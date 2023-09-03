@@ -1,3 +1,4 @@
+
 use futures::executor::block_on;
 use glam::{Quat, Vec3};
 use std::time::{Duration, Instant};
@@ -17,6 +18,12 @@ use simulation::Simulation;
 mod visualisation;
 use visualisation::Camera;
 use visualisation::Visualisation;
+
+mod debug;
+use debug::debug_buffer;
+
+mod object;
+use object::Object;
 
 fn main() {
     block_on(async_main());
@@ -63,7 +70,7 @@ async fn async_main() {
         view_formats: vec![],
     };
 
-    let mut simulation = Simulation::new(32, 32, 32, &device);
+    let mut simulation = Simulation::new(8, 8, 8, &device);
     simulation.populate(&device, &queue);
 
     let mut distance = 8.;
@@ -79,6 +86,7 @@ async fn async_main() {
     simulation.map_cells_to_objects(&device, &queue);
     // simulation.readback_objects(&device, &queue).await;
     // simulation.readback_objects_length(&device, &queue).await;
+    debug_buffer::<Object>(&device, &queue, &simulation.objects_buffer, (simulation.width() * simulation.height() * simulation.depth()) as u64).await;
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
