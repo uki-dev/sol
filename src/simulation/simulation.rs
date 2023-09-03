@@ -90,7 +90,6 @@ impl Simulation {
             mapped_at_creation: false,
         });
 
-        println!("Object size in bytes {}", size_of::<Object>());
         let objects_buffer = device.create_buffer(&BufferDescriptor {
             size: size_of::<Object>() as u64 * (width * height * depth) as u64,
             label: Some("Simulation::objects_buffer"),

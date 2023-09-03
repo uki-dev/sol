@@ -73,21 +73,13 @@ async fn async_main() {
     let mut simulation = Simulation::new(8, 8, 8, &device);
     simulation.populate(&device, &queue);
 
-    let mut distance = 8.;
+    let mut distance = 16.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
 
-    let mut visualisation = Visualisation::new(&device, surface_formats.into(), &simulation.objects_buffer, &simulation.objects_length_buffer);
+    let visualisation = Visualisation::new(&device, surface_formats.into(), &simulation.objects_buffer, &simulation.objects_length_buffer);
 
     let mut last_tick = Instant::now();
-
-    // simulation.simulate(&device, &queue);
-    // simulation.readback_cells(&device, &queue).await;
-    simulation.map_cells_to_objects(&device, &queue);
-    // simulation.readback_objects(&device, &queue).await;
-    // simulation.readback_objects_length(&device, &queue).await;
-    debug_buffer::<Object>(&device, &queue, &simulation.objects_buffer, (simulation.width() * simulation.height() * simulation.depth()) as u64).await;
-
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -104,7 +96,6 @@ async fn async_main() {
                 let yaw = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
                 pitch = pitch.clamp(0., std::f32::consts::FRAC_PI_2);
                 
-
                 camera.rotation = Quat::from_axis_angle(Vec3::Y, yaw)
                     * Quat::from_axis_angle(Vec3::X, pitch);
                 camera.position = Vec3::new(0., -0., 0.) + camera.rotation * Vec3::new(0., 0., -distance);
@@ -126,20 +117,20 @@ async fn async_main() {
                 ..
             } => {
                 camera.aspect = size.width as f32 / size.height as f32;
-
                 surface_configuration.width = size.width;
                 surface_configuration.height = size.height;
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
                 let elapsed = last_tick.elapsed();
-                if elapsed >= Duration::from_millis(16) {
-                    window.request_redraw();
+                if elapsed >= Duration::from_millis(100) {
+                    simulation.simulate(&device, &queue);
+                    simulation.map_cells_to_objects(&device, &queue);
                     last_tick = Instant::now();
                 }
+                window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-
                 let current_texture = surface
                     .get_current_texture()
                     .expect("Failed to get current texture");
