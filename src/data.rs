@@ -17,6 +17,17 @@ pub struct Particle {
 unsafe impl Zeroable for Particle {}
 unsafe impl Pod for Particle {}
 
+pub const MAX_PARTICLES_PER_GRID_CELL: usize = 4;
+
+#[repr(C, align(16))]
+#[derive(Debug, Clone, Copy)]
+pub struct GridCell {
+    pub particles: [Particle; MAX_PARTICLES_PER_GRID_CELL],
+    pub particles_length: u32,
+}
+unsafe impl Zeroable for GridCell {}
+unsafe impl Pod for GridCell {}
+
 #[repr(C, align(16))]
 #[derive(Debug)]
 pub struct Octree {

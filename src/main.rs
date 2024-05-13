@@ -19,7 +19,10 @@ mod data;
 use data::Particle;
 
 mod partition;
-use partition::SpatialPartioner;
+
+use crate::partition::GridCell;
+use crate::partition::SpatialPartioner;
+use crate::partition::GRID_SIZE;
 
 mod simulation;
 use simulation::Simulation;
@@ -85,7 +88,7 @@ async fn async_main() {
         Particle {
             position: [0.0, 0.0, 0.0, 0.0],
         };
-        1000000
+        3
     ];
 
     particles[0] = Particle {
@@ -96,23 +99,40 @@ async fn async_main() {
         position: [-64.0, -32.0, -16.0, 0.0],
     };
 
+    particles[2] = Particle {
+        position: [-16.0, -16.0, 32.0, 0.0],
+    };
+
     let particle_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("main::particle_buffer"),
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
         contents: bytemuck::cast_slice(&particles),
     });
-
-    let spatial_partitioner = SpatialPartioner::new(&device, &particle_buffer, particles.len());
-    spatial_partitioner.compute_bounds(&device, &queue);
-    let _ = debug_buffer::<Bounds>(&device, &queue, &spatial_partitioner.bounds_buffer, 1).await;
+    let _ =
+        debug_buffer::<Particle>(&device, &queue, &particle_buffer, particles.len() as u64).await;
 
     let spatial_partitioner = SpatialPartioner::new(&device, &particle_buffer, particles.len());
     let timing = profile(&device, &queue, |command_encoder| {
         spatial_partitioner.compute_bounds_with_encoder(&queue, command_encoder);
     })
     .await;
+    // TODO: We should just rename this to some read buffer utility and then print it on the consumer side
+    let _ = debug_buffer::<Bounds>(&device, &queue, &spatial_partitioner.bounds_buffer, 1).await;
     println!("Compute bounds duration: {}ms", timing.duration());
 
+    let timing = profile(&device, &queue, |command_encoder| {
+        spatial_partitioner.compute_grid_with_encoder(command_encoder);
+    })
+    .await;
+    // TODO: We should just rename this to some read buffer utility and then print it on the consumer side
+    let _ = debug_buffer::<GridCell>(
+        &device,
+        &queue,
+        &spatial_partitioner.grid_buffer,
+        (GRID_SIZE * GRID_SIZE * GRID_SIZE) as u64,
+    )
+    .await;
+    println!("Compute grid duration: {}ms", timing.duration());
     // let mut simulation = Simulation::new(8, 8, 8, &device);
     // simulation.populate(&device, &queue);
 

@@ -9,6 +9,7 @@ edition = "2021"
 bytemuck = "1.13.1"
 futures = "0.3.28"
 glam = "0.24.1"
+include-wgsl-oil = { version = "0.2.5", features = ["glam"] }
 ultraviolet = "0.9.1"
 wgpu = "0.16.1"
 winit = "0.28.6"
