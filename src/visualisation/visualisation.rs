@@ -1,65 +1,52 @@
-use std::{borrow::Cow::Borrowed, mem::size_of};
+use crate::Camera;
+use bytemuck::{Pod, Zeroable};
+use encase::{ShaderSize, UniformBuffer};
+use std::borrow::Cow::Borrowed;
 use wgpu::{
-    BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor,
+    BindGroupDescriptor, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BindingType, Buffer, BufferBindingType, BufferDescriptor, BufferUsages,
     Color, ColorTargetState, CommandEncoderDescriptor, Device, FragmentState, LoadOp,
     MultisampleState, Operations, PipelineLayoutDescriptor, PrimitiveState, Queue,
     RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor,
-    ShaderModuleDescriptor, ShaderSource, ShaderStages, Surface, TextureViewDescriptor,
-    VertexState, TextureView,
+    ShaderModuleDescriptor, ShaderSource::Wgsl, ShaderStages, TextureView, VertexState,
 };
 
-use super::Camera;
-
-#[repr(C, align(16))]
-#[derive(Default, Copy, Clone)]
-struct Uniforms {
-    camera_position: [f32; 3],
-    _padding: [u8; 4],
-    inverse_view_projection: [f32; 4 * 4],
-}
-
-unsafe impl bytemuck::Pod for Uniforms {}
-unsafe impl bytemuck::Zeroable for Uniforms {}
+#[include_wgsl_oil::include_wgsl_oil("visualisation.wgsl")]
+mod visualisation_shader {}
+pub use visualisation_shader::types::Uniforms;
+unsafe impl Pod for Uniforms {}
+unsafe impl Zeroable for Uniforms {}
+impl Copy for Uniforms {}
 
 pub struct Visualisation {
-    uniform_buffer: Buffer,
-    bind_group: BindGroup,
+    bind_group_layout: BindGroupLayout,
     render_pipeline: RenderPipeline,
+    uniform_buffer: Buffer,
 }
 
 impl Visualisation {
-    pub fn new(device: &Device, target: ColorTargetState, objects_buffer: &Buffer, objects_length_buffer: &Buffer) -> Self {
-        let (uniform_buffer, bind_group, render_pipeline) =
-            Self::initialise(device, target, objects_buffer, objects_length_buffer);
+    pub fn new(device: &Device, target: ColorTargetState) -> Self {
+        let (bind_group_layout, render_pipeline, uniform_buffer) = Self::initialise(device, target);
         Visualisation {
-            uniform_buffer,
-            bind_group,
+            bind_group_layout,
             render_pipeline,
+            uniform_buffer,
         }
     }
 
     fn initialise(
         device: &Device,
         target: ColorTargetState,
-        objects_buffer: &Buffer,
-        objects_length_buffer: &Buffer
-    ) -> (Buffer, BindGroup, RenderPipeline) {
+    ) -> (BindGroupLayout, RenderPipeline, Buffer) {
         let shader = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(Borrowed(include_str!("visualisation.wgsl"))),
-        });
-
-        let uniform_buffer: Buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("uniforms"),
-            size: size_of::<Uniforms>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+            source: Wgsl(Borrowed(visualisation_shader::SOURCE)),
         });
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: None,
             entries: &[
+                // Uniforms
                 BindGroupLayoutEntry {
                     binding: 0,
                     visibility: ShaderStages::FRAGMENT,
@@ -70,6 +57,7 @@ impl Visualisation {
                     },
                     count: None,
                 },
+                // Particles
                 BindGroupLayoutEntry {
                     binding: 1,
                     visibility: ShaderStages::FRAGMENT,
@@ -80,6 +68,7 @@ impl Visualisation {
                     },
                     count: None,
                 },
+                // Bounds
                 BindGroupLayoutEntry {
                     binding: 2,
                     visibility: ShaderStages::FRAGMENT,
@@ -90,24 +79,16 @@ impl Visualisation {
                     },
                     count: None,
                 },
-            ],
-        });
-
-        let bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: None,
-            layout: &bind_group_layout,
-            entries: &[
-                BindGroupEntry {
-                    binding: 0,
-                    resource: uniform_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 1,
-                    resource: objects_buffer.as_entire_binding(),
-                },
-                BindGroupEntry {
-                    binding: 2,
-                    resource: objects_length_buffer.as_entire_binding(),
+                // Grid
+                BindGroupLayoutEntry {
+                    binding: 3,
+                    visibility: ShaderStages::FRAGMENT,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
                 },
             ],
         });
@@ -137,7 +118,14 @@ impl Visualisation {
             multiview: None,
         });
 
-        return (uniform_buffer, bind_group, render_pipeline);
+        let uniform_buffer: Buffer = device.create_buffer(&BufferDescriptor {
+            label: None,
+            size: Uniforms::SHADER_SIZE.get(),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        return (bind_group_layout, render_pipeline, uniform_buffer);
     }
 
     pub fn visualise(
@@ -145,23 +133,48 @@ impl Visualisation {
         device: &Device,
         queue: &Queue,
         view: &TextureView,
+        particle_buffer: &Buffer,
+        bounds_buffer: &Buffer,
+        grid_buffer: &Buffer,
         camera: &Camera,
     ) {
-        let (uniform_buffer, bind_group, render_pipeline) = (
+        let (uniform_buffer, bind_group_layout, render_pipeline) = (
             &self.uniform_buffer,
-            &self.bind_group,
+            &self.bind_group_layout,
             &self.render_pipeline,
         );
 
         let uniforms = Uniforms {
-            camera_position: camera.position.to_array(),
-            inverse_view_projection: (camera.projection() * camera.view())
-                .inverse()
-                .to_cols_array()
-                .clone(),
-            ..Default::default()
+            camera_position: camera.position,
+            inverse_view_projection: (camera.projection() * camera.view()).inverse(),
         };
-        queue.write_buffer(&uniform_buffer, 0, bytemuck::cast_slice(&[uniforms]));
+
+        let mut encased_uniform_buffer = UniformBuffer::new(Vec::<u8>::new());
+        encased_uniform_buffer.write(&uniforms).unwrap();
+        queue.write_buffer(&uniform_buffer, 0, &encased_uniform_buffer.into_inner());
+
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: None,
+            layout: bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: uniform_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: particle_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 2,
+                    resource: bounds_buffer.as_entire_binding(),
+                },
+                BindGroupEntry {
+                    binding: 3,
+                    resource: grid_buffer.as_entire_binding(),
+                },
+            ],
+        });
 
         let mut command_encoder =
             device.create_command_encoder(&CommandEncoderDescriptor { label: None });

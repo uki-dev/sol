@@ -6,10 +6,12 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytemuck = "1.13.1"
-futures = "0.3.28"
-glam = "0.24.1"
-include-wgsl-oil = { version = "0.2.5", features = ["glam"] }
-ultraviolet = "0.9.1"
-wgpu = "0.16.1"
-winit = "0.28.6"
+futures = "0.3.30"
+bytemuck = "1.16.0"
+
+winit = "0.28.7"
+wgpu = "0.16.3"
+
+encase = { version = "0.8.0", features = ["glam"] }
+glam = "0.27.0"
+include-wgsl-oil = { version = "0.2.5", features = ["glam", "encase"] }

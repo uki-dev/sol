@@ -1,3 +1,5 @@
+#import ../common.wgsl as Common
+
 const EPSILON = .0001;
 
 const STEP_SIZE = .01;
@@ -8,7 +10,7 @@ const SHADOW_MAX_DISTANCE = 8.;
 const LIGHT_COLOUR = vec3<f32>(0.8, 0.8, 0.8);
 const LIGHT_DIRECTION = vec3<f32>(.5, 1., -.3);
 
-struct Uniforms {
+@export struct Uniforms {
     // TODO: can we just decompose this from `inverse__view_projection`?
     camera_position: vec3<f32>,
     inverse_view_projection: mat4x4<f32>,
@@ -18,21 +20,17 @@ struct Uniforms {
 @binding(0)
 var<uniform> uniforms: Uniforms;
 
-const SPHERE = 0u;
-struct Object {
-    matrix: mat4x4<f32>,
-    colour: vec4<f32>,
-    sdf: u32,
-}
-
-// TODO: can we instead just store a struct with arrays and use `arrayLength`?
 @group(0)
 @binding(1)
-var<storage, read> objects: array<Object>;
+var<storage, read> particles: array<Common::Particle>;
 
 @group(0)
 @binding(2)
-var<storage, read> objects_length: u32;
+var<storage, read> bounds: Common::Bounds;
+
+@group(0)
+@binding(3)
+var<storage, read> grid: array<Common::GridCell>;
 
 struct Vertex {
     @builtin(position) position: vec4<f32>,
@@ -91,7 +89,8 @@ fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
             result.hit = true;
             result.position = position;
             result.normal = evaluate_scene_normal(position);
-            result.colour = evaluate_scene_result.object.colour;
+            // result.colour = evaluate_scene_result.object.colour;
+            result.colour = vec4<f32>(1.0);
             return result;
         }
         distance = evaluate_scene_result.distance;
@@ -102,23 +101,36 @@ fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
 }
 
 struct EvaluateSceneResult {
-    object: Object,
+    // object: Object,
     distance: f32,
 }
 
 fn evaluate_scene(position: vec3<f32>) -> EvaluateSceneResult {
     var result: EvaluateSceneResult; 
     result.distance = MAX_DISTANCE;
-    for (var i = 0u; i < objects_length; i += 1u) {
-        let object = objects[i];
-        // TODO: `object.matrix` be the inverse for world -> local
-        let relative_position = (vec4<f32>(position - object.matrix[3].xyz, 1.)).xyz;
-        let distance = sphere(relative_position, 0.5);
-        if distance < result.distance {
-            result.distance = distance;
-            result.object = object;
+    let grid_index = Common::world_position_to_grid_index(position, bounds);
+    let grid_size = i32(Common::GRID_SIZE);
+    if grid_index >= 0 && grid_index < grid_size * grid_size * grid_size {
+        for (var i = 0u; i < grid[grid_index].particles_length; i += 1u) {
+            let particle_index = grid[grid_index].particles[i];
+            let particle = particles[particle_index];
+            let relative_position = (vec4<f32>(position - particle.position, 1.)).xyz;
+            let distance = sphere(relative_position, 0.5);
+            if distance < result.distance {
+                result.distance = distance;
+            }
         }
     }
+    // for (var i = 0u; i < objects_length; i += 1u) {
+    //     let object = objects[i];
+    //     // TODO: `object.matrix` be the inverse for world -> local
+    //     let relative_position = (vec4<f32>(position - object.matrix[3].xyz, 1.)).xyz;
+    //     let distance = sphere(relative_position, 0.5);
+    //     if distance < result.distance {
+    //         result.distance = distance;
+    //         result.object = object;
+    //     }
+    // }
     return result;
 }
 
@@ -148,8 +160,6 @@ fn evaluate_scene_normal(position: vec3<f32>) -> vec3<f32> {
 //     }
 //     return 1.;
 // }
-
-// TODO: figure out shader imports
 
 // https://iquilezles.org/articles/distfunctions/
 
