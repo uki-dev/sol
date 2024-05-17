@@ -1,5 +1,14 @@
 #import ../common.wgsl as Common
 
+struct AtomicBounds {
+  min_x: atomic<i32>,
+  min_y: atomic<i32>,
+  min_z: atomic<i32>,
+  max_x: atomic<i32>,
+  max_y: atomic<i32>,
+  max_z: atomic<i32>,
+}
+
 @group(0)
 @binding(0)
 var<storage, read> particles: array<Common::Particle>;
@@ -7,7 +16,7 @@ var<storage, read> particles: array<Common::Particle>;
 
 @group(0)
 @binding(1)
-var<storage, read_write> bounds: Common::Bounds;
+var<storage, read_write> bounds: AtomicBounds;
 
 @compute
 @workgroup_size(1)

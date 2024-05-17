@@ -7,17 +7,17 @@ const MAX_PARTICLES_PER_GRID_CELL = MAX_PARTICLES / GRID_SIZE;
 }
 
 @export struct Bounds {
-  min_x: atomic<i32>,
-  min_y: atomic<i32>,
-  min_z: atomic<i32>,
-  max_x: atomic<i32>,
-  max_y: atomic<i32>,
-  max_z: atomic<i32>,
+  min_x: i32,
+  min_y: i32,
+  min_z: i32,
+  max_x: i32,
+  max_y: i32,
+  max_z: i32,
 }
 
 @export struct GridCell {
   particles: array<u32, MAX_PARTICLES_PER_GRID_CELL>,
-  particles_length: atomic<u32>,
+  particles_length: u32,
 }
 
 fn grid_position_to_grid_index(position: vec3<i32>) -> i32 {
@@ -25,10 +25,12 @@ fn grid_position_to_grid_index(position: vec3<i32>) -> i32 {
   return position.x + position.y * grid_size + position.z * grid_size * grid_size;
 }
 
-fn world_position_to_grid_position(position: vec3<f32>, bounds_min: vec3<f32>, bounds_max: vec3<f32>) -> vec3<i32> {
+fn world_position_to_grid_position(position: vec3<f32>, bounds: Bounds) -> vec3<i32> {
+  let bounds_min = vec3<f32>(vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z));
+  let bounds_max = vec3<f32>(vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z));
   return vec3<i32>(round((position - bounds_min) / (bounds_max - bounds_min) * f32(GRID_SIZE - 1)));
 }
 
-fn world_position_to_grid_index(position: vec3<f32>, bounds_min: vec3<f32>, bounds_max: vec3<f32>) -> i32 {
-  return grid_position_to_grid_index(world_position_to_grid_position(position, bounds_min, bounds_max));
+fn world_position_to_grid_index(position: vec3<f32>, bounds: Bounds) -> i32 {
+  return grid_position_to_grid_index(world_position_to_grid_position(position, bounds));
 }

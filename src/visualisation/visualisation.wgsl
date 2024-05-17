@@ -149,16 +149,8 @@ fn evaluate_scene_normal(position: vec3<f32>) -> vec3<f32> {
 
 fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
     var result: EvaluateSceneResult; 
-    let bounds_min = vec3<f32>(vec3<i32>(
-        atomicLoad(&bounds.min_x),
-        atomicLoad(&bounds.min_y),
-        atomicLoad(&bounds.min_z)
-    ));
-    let bounds_max = vec3<f32>(vec3<i32>(
-        atomicLoad(&bounds.max_x),
-        atomicLoad(&bounds.max_y),
-        atomicLoad(&bounds.max_z)
-    ));
+    let bounds_min = vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z);
+    let bounds_max = vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z);
     let bounds_centre = vec3<f32>(bounds_min + bounds_max) * 0.5;
     let bounds_extent = vec3<f32>(bounds_max - bounds_min);
     result.distance = MAX_DISTANCE;
@@ -169,13 +161,13 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
 
     var offset = vec3<i32>();
     let grid_size = i32(Common::GRID_SIZE);
-    let grid_position = Common::world_position_to_grid_position(position, bounds_min, bounds_max);
+    let grid_position = Common::world_position_to_grid_position(position, bounds);
     for (offset.x = -1; offset.x < 1; offset.x += 1) {
         for (offset.y = -1; offset.y < 1; offset.y += 1) {
             for (offset.z = -1; offset.z < 1; offset.z += 1) {
                 let bounded_grid_position = clamp(grid_position + offset, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
                 let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
-                let particles_length = atomicLoad(&grid[grid_index].particles_length);
+                let particles_length = grid[grid_index].particles_length;
                 for (var i = 0u; i < particles_length; i += 1u) {
                     let particle_index = grid[grid_index].particles[i];
                     let particle = particles[particle_index];
