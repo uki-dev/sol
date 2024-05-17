@@ -79,7 +79,7 @@ struct RayMarchResult {
     colour: vec4<f32>,
 }
 
-fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
+fn ray_march_adaptive(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
     var result: RayMarchResult;
     var position = origin;
     var distance: f32 = evaluate_scene(position).distance;
@@ -100,6 +100,24 @@ fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
     return result;
 }
 
+fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
+    var result: RayMarchResult;
+    for (var step: f32 = 0.; step < MAX_DISTANCE; step += STEP_SIZE) {
+        let position = origin + direction * step;
+        let evaluate_scene_result = evaluate_scene(position);
+        if evaluate_scene_result.distance <= EPSILON {
+            result.hit = true;
+            result.position = position;
+            result.normal = evaluate_scene_normal(position);
+            // result.colour = evaluate_scene_result.object.colour;
+            result.colour = vec4<f32>(1.0);
+            return result;
+        }
+    }
+    result.hit = false;
+    return result;
+}
+
 struct EvaluateSceneResult {
     // object: Object,
     distance: f32,
@@ -108,29 +126,9 @@ struct EvaluateSceneResult {
 fn evaluate_scene(position: vec3<f32>) -> EvaluateSceneResult {
     var result: EvaluateSceneResult; 
     result.distance = MAX_DISTANCE;
-    let grid_index = Common::world_position_to_grid_index(position, bounds);
-    let grid_size = i32(Common::GRID_SIZE);
-    if grid_index >= 0 && grid_index < grid_size * grid_size * grid_size {
-        for (var i = 0u; i < grid[grid_index].particles_length; i += 1u) {
-            let particle_index = grid[grid_index].particles[i];
-            let particle = particles[particle_index];
-            let relative_position = (vec4<f32>(position - particle.position, 1.)).xyz;
-            let distance = sphere(relative_position, 0.5);
-            if distance < result.distance {
-                result.distance = distance;
-            }
-        }
-    }
-    // for (var i = 0u; i < objects_length; i += 1u) {
-    //     let object = objects[i];
-    //     // TODO: `object.matrix` be the inverse for world -> local
-    //     let relative_position = (vec4<f32>(position - object.matrix[3].xyz, 1.)).xyz;
-    //     let distance = sphere(relative_position, 0.5);
-    //     if distance < result.distance {
-    //         result.distance = distance;
-    //         result.object = object;
-    //     }
-    // }
+    // result.distance = sphere(position - vec3<f32>(0.0), 0.5);
+    result = evaluate_grid(position);
+  
     return result;
 }
 
@@ -147,6 +145,49 @@ fn evaluate_scene_normal(position: vec3<f32>) -> vec3<f32> {
         (c - d),
         (e - f)
     ));
+}
+
+fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
+    var result: EvaluateSceneResult; 
+    let bounds_min = vec3<f32>(vec3<i32>(
+        atomicLoad(&bounds.min_x),
+        atomicLoad(&bounds.min_y),
+        atomicLoad(&bounds.min_z)
+    ));
+    let bounds_max = vec3<f32>(vec3<i32>(
+        atomicLoad(&bounds.max_x),
+        atomicLoad(&bounds.max_y),
+        atomicLoad(&bounds.max_z)
+    ));
+    let bounds_centre = vec3<f32>(bounds_min + bounds_max) * 0.5;
+    let bounds_extent = vec3<f32>(bounds_max - bounds_min);
+    result.distance = MAX_DISTANCE;
+    let outer_distance = cube(position, bounds_extent);
+    if outer_distance > EPSILON {
+        result.distance = outer_distance;
+    }
+
+    var offset = vec3<i32>();
+    let grid_size = i32(Common::GRID_SIZE);
+    let grid_position = Common::world_position_to_grid_position(position, bounds_min, bounds_max);
+    for (offset.x = -1; offset.x < 1; offset.x += 1) {
+        for (offset.y = -1; offset.y < 1; offset.y += 1) {
+            for (offset.z = -1; offset.z < 1; offset.z += 1) {
+                let bounded_grid_position = clamp(grid_position + offset, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
+                let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
+                let particles_length = atomicLoad(&grid[grid_index].particles_length);
+                for (var i = 0u; i < particles_length; i += 1u) {
+                    let particle_index = grid[grid_index].particles[i];
+                    let particle = particles[particle_index];
+                    let relative_position = position - particle.position;
+                    let distance = sphere(relative_position, 0.5);
+                    result.distance = sharp_union(result.distance, distance);
+                }
+            }
+        }
+    }
+
+    return result;
 }
 
 // fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {
@@ -171,8 +212,8 @@ fn sphere_relative(position: vec3<f32>, translation: vec3<f32>, radius: f32) -> 
     return length(position - translation) - radius;
 }
 
-fn cube(position: vec3<f32>, extents: vec3<f32>) -> f32 {
-    let q = abs(position) - extents;
+fn cube(position: vec3<f32>, extent: vec3<f32>) -> f32 {
+    let q = abs(position) - extent;
     return length(max(q, vec3<f32>(.0))) + min(max(q.x, max(q.y, q.z)), .0);
 }
 

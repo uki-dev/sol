@@ -1,14 +1,11 @@
-use std::{borrow::Cow, mem::size_of};
-
+use crate::common::{Particle, MAX_PARTICLES};
+use encase::ShaderSize;
+use std::borrow::Cow;
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer,
     BufferBindingType, BufferDescriptor, BufferUsages, ComputePipeline, ComputePipelineDescriptor,
     Device, PipelineLayoutDescriptor, Queue, ShaderModuleDescriptor, ShaderSource, ShaderStages,
 };
-
-use encase::ShaderSize;
-
-use crate::common::{Particle, MAX_PARTICLES};
 
 #[include_wgsl_oil::include_wgsl_oil("simulation.wgsl")]
 mod simulation_shader {}

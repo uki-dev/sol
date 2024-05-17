@@ -11,7 +11,7 @@ use wgpu::{
 };
 
 #[include_wgsl_oil::include_wgsl_oil("bounds.wgsl")]
-mod bounds_shader {}
+mod shader {}
 
 pub struct BoundsPartition {
     bind_group_layout: BindGroupLayout,
@@ -29,14 +29,14 @@ impl BoundsPartition {
     pub fn new(device: &Device) -> Self {
         let shader_module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(Cow::Borrowed(bounds_shader::SOURCE)),
+            source: ShaderSource::Wgsl(Cow::Borrowed(shader::SOURCE)),
         });
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: None,
             entries: &[
                 BindGroupLayoutEntry {
-                    binding: bounds_shader::globals::particles::binding::BINDING,
+                    binding: shader::globals::particles::binding::BINDING,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: true },
@@ -46,7 +46,7 @@ impl BoundsPartition {
                     count: None,
                 },
                 BindGroupLayoutEntry {
-                    binding: bounds_shader::globals::bounds::binding::BINDING,
+                    binding: shader::globals::bounds::binding::BINDING,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: false },
@@ -69,7 +69,7 @@ impl BoundsPartition {
                 label: None,
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
-                entry_point: bounds_shader::entry_points::calculate_bounds::NAME,
+                entry_point: shader::entry_points::calculate_bounds::NAME,
             });
 
         let bounds_buffer = device.create_buffer(&BufferDescriptor {
@@ -121,11 +121,11 @@ impl BoundsPartition {
             layout: &self.bind_group_layout,
             entries: &[
                 BindGroupEntry {
-                    binding: bounds_shader::globals::particles::binding::BINDING,
+                    binding: shader::globals::particles::binding::BINDING,
                     resource: particle_buffer.as_entire_binding(),
                 },
                 BindGroupEntry {
-                    binding: bounds_shader::globals::bounds::binding::BINDING,
+                    binding: shader::globals::bounds::binding::BINDING,
                     resource: self.bounds_buffer.as_entire_binding(),
                 },
             ],
@@ -134,7 +134,7 @@ impl BoundsPartition {
             command_encoder.begin_compute_pass(&ComputePassDescriptor { label: None });
         compute_pass.set_pipeline(&self.calculate_bounds_pipeline);
         compute_pass.set_bind_group(0, &bind_group, &[]);
-        let workgroup_size = bounds_shader::entry_points::calculate_bounds::WORKGROUP_SIZE;
+        let workgroup_size = shader::entry_points::calculate_bounds::WORKGROUP_SIZE;
         compute_pass.dispatch_workgroups(
             (MAX_PARTICLES as f32 / workgroup_size[0] as f32).ceil() as u32,
             workgroup_size[1],

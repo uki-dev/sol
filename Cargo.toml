@@ -15,3 +15,4 @@ wgpu = "0.16.3"
 encase = { version = "0.8.0", features = ["glam"] }
 glam = "0.27.0"
 include-wgsl-oil = { version = "0.2.5", features = ["glam", "encase"] }
+rand = "0.8.5"
