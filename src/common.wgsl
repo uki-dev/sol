@@ -1,5 +1,5 @@
-const GRID_SIZE = 2u;
-const MAX_PARTICLES = 16u; 
+const GRID_SIZE = 32u;
+const MAX_PARTICLES = 8096u; 
 const MAX_PARTICLES_PER_GRID_CELL = MAX_PARTICLES / GRID_SIZE;
 
 @export struct Particle {

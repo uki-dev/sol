@@ -88,9 +88,9 @@ async fn async_main() {
 
     for particle in particles.iter_mut() {
         particle.position = Vec3::new(
-            rng.gen_range(-2.0..2.0),
-            rng.gen_range(-2.0..2.0),
-            rng.gen_range(-2.0..2.0),
+            rng.gen_range(-64.0..64.0),
+            rng.gen_range(-64.0..64.0),
+            rng.gen_range(-64.0..64.0),
         );
     }
 
@@ -101,8 +101,8 @@ async fn async_main() {
         usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
         contents: &encased_particle_buffer.into_inner(),
     });
-    let data = debug_buffer::<Vec<Particle>>(&device, &queue, &particle_buffer);
-    println!("Particles {:?}", data);
+    // let data = debug_buffer::<Vec<Particle>>(&device, &queue, &particle_buffer);
+    // println!("Particles {:?}", data);
 
     let bounds_partition = BoundsPartition::new(&device);
     let timing = profile(&device, &queue, |command_encoder| {
@@ -119,20 +119,6 @@ async fn async_main() {
     println!("Bounds: {:?}", data);
     println!("Calculate bounds duration: {}ms", timing.duration());
 
-    // let bounds = Bounds {
-    //     min: IVec3::new(-8, -8, -8),
-    //     max: IVec3::new(8, 8, 8),
-    // };
-    // let mut encased_bounds_buffer = StorageBuffer::new(Vec::<u8>::new());
-    // encased_bounds_buffer.write(&bounds).unwrap();
-    // let bounds_buffer = device.create_buffer_init(&BufferInitDescriptor {
-    //     label: None,
-    //     usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
-    //     contents: &encased_bounds_buffer.into_inner(),
-    // });
-    // let data = debug_buffer::<Bounds>(&device, &queue, &bounds_buffer);
-    // println!("Bounds: {:?}", data);
-
     let grid_partition = GridPartition::new(&device);
     let timing = profile(&device, &queue, |command_encoder| {
         grid_partition.build_grid_with_encoder(
@@ -144,13 +130,13 @@ async fn async_main() {
     })
     .await;
     // TODO: We should just rename this to some read buffer utility and then print it on the consumer side
-    let data = debug_buffer::<Vec<GridCell>>(&device, &queue, &grid_partition.grid_buffer);
-    println!("Grid: {:?}", data);
-    let total_grid_particles: u32 = data.iter().map(|element| element.particles_length).sum();
-    println!(
-        "Max Particles {}, Grid Particles {}",
-        MAX_PARTICLES, total_grid_particles
-    );
+    // let data = debug_buffer::<Vec<GridCell>>(&device, &queue, &grid_partition.grid_buffer);
+    // println!("Grid: {:?}", data);
+    // let total_grid_particles: u32 = data.iter().map(|element| element.particles_length).sum();
+    // println!(
+    //     "Max Particles {}, Grid Particles {}",
+    //     MAX_PARTICLES, total_grid_particles
+    // );
     println!("Build grid duration: {}ms", timing.duration());
 
     // let mut simulation = Simulation::new(8, 8, 8, &device);

@@ -3,7 +3,7 @@
 const EPSILON = .0001;
 
 const STEP_SIZE = .01;
-const MAX_DISTANCE = 32.;
+const MAX_DISTANCE = 64.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
 
@@ -154,17 +154,18 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
     let bounds_centre = vec3<f32>(bounds_min + bounds_max) * 0.5;
     let bounds_extent = vec3<f32>(bounds_max - bounds_min);
     result.distance = MAX_DISTANCE;
-    let outer_distance = cube(position, bounds_extent);
-    if outer_distance > EPSILON {
+    let outer_distance = cube(position - bounds_centre, bounds_extent);
+    if outer_distance > EPSILON * 2 {
         result.distance = outer_distance;
     }
 
     var offset = vec3<i32>();
     let grid_size = i32(Common::GRID_SIZE);
     let grid_position = Common::world_position_to_grid_position(position, bounds);
-    for (offset.x = -1; offset.x < 1; offset.x += 1) {
-        for (offset.y = -1; offset.y < 1; offset.y += 1) {
-            for (offset.z = -1; offset.z < 1; offset.z += 1) {
+    let neighbour_range = 1;
+    for (offset.x = -neighbour_range; offset.x < neighbour_range; offset.x += 1) {
+        for (offset.y = -neighbour_range; offset.y < neighbour_range; offset.y += 1) {
+            for (offset.z = -neighbour_range; offset.z < neighbour_range; offset.z += 1) {
                 let bounded_grid_position = clamp(grid_position + offset, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
                 let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
                 let particles_length = grid[grid_index].particles_length;
@@ -173,7 +174,7 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
                     let particle = particles[particle_index];
                     let relative_position = position - particle.position;
                     let distance = sphere(relative_position, 0.5);
-                    result.distance = sharp_union(result.distance, distance);
+                    result.distance = smooth_union(result.distance, distance, 1.0);
                 }
             }
         }
