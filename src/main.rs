@@ -88,9 +88,9 @@ async fn async_main() {
 
     for particle in particles.iter_mut() {
         particle.position = Vec3::new(
-            rng.gen_range(-64.0..64.0),
-            rng.gen_range(-64.0..64.0),
-            rng.gen_range(-64.0..64.0),
+            rng.gen_range(-32.0..32.0),
+            rng.gen_range(-32.0..32.0),
+            rng.gen_range(-32.0..32.0),
         );
     }
 
@@ -141,7 +141,6 @@ async fn async_main() {
 
     // let mut simulation = Simulation::new(8, 8, 8, &device);
     // simulation.populate(&device, &queue);
-
     let mut distance = 16.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
@@ -149,6 +148,7 @@ async fn async_main() {
     let visualisation = Visualisation::new(&device, surface_formats.into());
 
     let mut last_tick = Instant::now();
+    let mut frame_count = 0;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -163,7 +163,7 @@ async fn async_main() {
 
                 let mut pitch = -(normalized_mouse_y * 2. - 1.) * std::f32::consts::PI;
                 let yaw = -(normalized_mouse_x * 2. - 1.) * std::f32::consts::PI;
-                pitch = pitch.clamp(0., std::f32::consts::FRAC_PI_2);
+                pitch = pitch.clamp(-std::f32::consts::FRAC_PI_2, std::f32::consts::FRAC_PI_2);
 
                 camera.rotation =
                     Quat::from_axis_angle(Vec3::Y, yaw) * Quat::from_axis_angle(Vec3::X, pitch);
@@ -193,15 +193,15 @@ async fn async_main() {
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
+                frame_count += 1;
                 let elapsed = last_tick.elapsed();
-                if elapsed >= Duration::from_millis(100) {
-                    // simulation.simulate(&device, &queue);
-                    // simulation.map_cells_to_objects(&device, &queue);
+                if elapsed >= Duration::from_millis(1000) {
+                    let fps = frame_count as f64 / elapsed.as_secs_f64();
+                    println!("FPS: {:.2}", fps);
                     last_tick = Instant::now();
+                    frame_count = 0;
                 }
-                window.request_redraw();
-            }
-            Event::RedrawRequested(_) => {
+
                 let current_texture = surface
                     .get_current_texture()
                     .expect("Failed to get current texture");
@@ -218,6 +218,8 @@ async fn async_main() {
                     &camera,
                 );
                 current_texture.present();
+
+                window.request_redraw();
             }
             // TODO: explicity destroy GPU resources
             Event::WindowEvent {

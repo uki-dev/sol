@@ -3,7 +3,7 @@
 const EPSILON = .0001;
 
 const STEP_SIZE = .01;
-const MAX_DISTANCE = 64.;
+const MAX_DISTANCE = 128.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
 
@@ -151,36 +151,22 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
     var result: EvaluateSceneResult; 
     let bounds_min = vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z);
     let bounds_max = vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z);
-    let bounds_centre = vec3<f32>(bounds_min + bounds_max) * 0.5;
-    let bounds_extent = vec3<f32>(bounds_max - bounds_min);
-    result.distance = MAX_DISTANCE;
-    let outer_distance = cube(position - bounds_centre, bounds_extent);
-    if outer_distance > EPSILON * 2 {
-        result.distance = outer_distance;
-    }
-
-    var offset = vec3<i32>();
-    let grid_size = i32(Common::GRID_SIZE);
     let grid_position = Common::world_position_to_grid_position(position, bounds);
-    let neighbour_range = 1;
-    for (offset.x = -neighbour_range; offset.x < neighbour_range; offset.x += 1) {
-        for (offset.y = -neighbour_range; offset.y < neighbour_range; offset.y += 1) {
-            for (offset.z = -neighbour_range; offset.z < neighbour_range; offset.z += 1) {
-                let bounded_grid_position = clamp(grid_position + offset, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
-                let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
-                let particles_length = grid[grid_index].particles_length;
-                for (var i = 0u; i < particles_length; i += 1u) {
-                    let particle_index = grid[grid_index].particles[i];
-                    let particle = particles[particle_index];
-                    let relative_position = position - particle.position;
-                    let distance = sphere(relative_position, 0.5);
-                    result.distance = smooth_union(result.distance, distance, 1.0);
-                }
-            }
-        }
+    let bounded_grid_position = clamp(grid_position, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
+    let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
+    let particles_length = grid[grid_index].particles_length;
+    result.distance = evaluate_particle(grid_index, 0u, position);
+    for (var i = 1u; i < particles_length; i++) {
+        result.distance = smooth_union(result.distance, evaluate_particle(grid_index, i, position), 1.0);
     }
-
     return result;
+}
+
+fn evaluate_particle(grid_index: i32, cell_particle_index: u32, position: vec3<f32>) -> f32 {
+    let particle_index = grid[grid_index].particles[cell_particle_index];
+    let particle = particles[particle_index];
+    let relative_position = position - particle.position;
+    return sphere(relative_position, 0.5);
 }
 
 // fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {
