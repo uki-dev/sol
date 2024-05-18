@@ -8,14 +8,12 @@ use wgpu::{
 };
 
 #[include_wgsl_oil::include_wgsl_oil("simulation.wgsl")]
-mod simulation_shader {}
+mod shader {}
 
 pub struct Simulation {
-    pub particle_buffer: Buffer,
-
     bind_group_layout: BindGroupLayout,
-    // populate_compute_pipeline: ComputePipeline,
     simulate_compute_pipeline: ComputePipeline,
+    pub particle_buffer: Buffer,
 }
 
 impl Drop for Simulation {
@@ -26,7 +24,7 @@ impl Simulation {
     pub fn new(device: &Device) -> Self {
         let shader_module = device.create_shader_module(ShaderModuleDescriptor {
             label: None,
-            source: ShaderSource::Wgsl(Cow::Borrowed(simulation_shader::SOURCE)),
+            source: ShaderSource::Wgsl(Cow::Borrowed(shader::SOURCE)),
         });
 
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
@@ -34,7 +32,7 @@ impl Simulation {
             entries: &[
                 // Particles
                 BindGroupLayoutEntry {
-                    binding: 0,
+                    binding: shader::globals::particles::binding::BINDING,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: false },
@@ -45,7 +43,18 @@ impl Simulation {
                 },
                 // Bounds
                 BindGroupLayoutEntry {
-                    binding: 1,
+                    binding: shader::globals::bounds::binding::BINDING,
+                    visibility: ShaderStages::COMPUTE,
+                    ty: BindingType::Buffer {
+                        ty: BufferBindingType::Storage { read_only: true },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // Grid
+                BindGroupLayoutEntry {
+                    binding: shader::globals::grid::binding::BINDING,
                     visibility: ShaderStages::COMPUTE,
                     ty: BindingType::Buffer {
                         ty: BufferBindingType::Storage { read_only: true },
@@ -68,37 +77,45 @@ impl Simulation {
                 label: None,
                 layout: Some(&pipeline_layout),
                 module: &shader_module,
-                entry_point: "simulate",
+                entry_point: shader::entry_points::simulate::NAME,
             });
 
         let particle_buffer = device.create_buffer(&BufferDescriptor {
             size: Particle::SHADER_SIZE.get() * MAX_PARTICLES as u64,
-            label: Some("Simulation::storage_buffer"),
+            label: None,
             usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
 
         Simulation {
-            particle_buffer,
             bind_group_layout,
             simulate_compute_pipeline,
+            particle_buffer,
         }
     }
 
-    fn dispatch(&self, device: &Device, queue: &Queue, pipeline: &ComputePipeline) {}
-
-    pub fn simulate(&mut self, device: &Device, queue: &Queue, bounds_buffer: &Buffer) {
+    pub fn simulate(
+        &self,
+        device: &Device,
+        queue: &Queue,
+        bounds_buffer: &Buffer,
+        grid_buffer: &Buffer,
+    ) {
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: None,
             layout: &self.bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
-                    binding: 0,
+                    binding: shader::globals::particles::binding::BINDING,
                     resource: self.particle_buffer.as_entire_binding(),
                 },
                 wgpu::BindGroupEntry {
-                    binding: 1,
+                    binding: shader::globals::bounds::binding::BINDING,
                     resource: bounds_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: shader::globals::grid::binding::BINDING,
+                    resource: grid_buffer.as_entire_binding(),
                 },
             ],
         });

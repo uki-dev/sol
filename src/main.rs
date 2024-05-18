@@ -23,6 +23,9 @@ use crate::partition::{BoundsPartition, GridPartition};
 mod visualisation;
 use crate::visualisation::{Camera, Visualisation};
 
+mod simulation;
+use crate::simulation::Simulation;
+
 pub mod debug;
 use debug::debug_buffer;
 
@@ -78,29 +81,32 @@ async fn async_main() {
         view_formats: vec![],
     };
 
+    let simulation = Simulation::new(&device);
+
     let mut rng = rand::thread_rng();
     let mut particles = vec![
         Particle {
             position: Vec3::new(0.0, 0.0, 0.0),
+            old_position: Vec3::new(0.0, 0.0, 0.0)
         };
         MAX_PARTICLES as usize
     ];
 
     for particle in particles.iter_mut() {
-        particle.position = Vec3::new(
+        let position = Vec3::new(
             rng.gen_range(-32.0..32.0),
             rng.gen_range(-32.0..32.0),
             rng.gen_range(-32.0..32.0),
         );
+        particle.position = position;
+        particle.old_position = position;
     }
 
     let mut encased_particle_buffer = StorageBuffer::new(Vec::<u8>::new());
     encased_particle_buffer.write(&particles).unwrap();
-    let particle_buffer = device.create_buffer_init(&BufferInitDescriptor {
-        label: None,
-        usage: BufferUsages::STORAGE | BufferUsages::COPY_DST | BufferUsages::COPY_SRC,
-        contents: &encased_particle_buffer.into_inner(),
-    });
+    let data = encased_particle_buffer.into_inner();
+    queue.write_buffer(&simulation.particle_buffer, 0, &data);
+
     // let data = debug_buffer::<Vec<Particle>>(&device, &queue, &particle_buffer);
     // println!("Particles {:?}", data);
 
@@ -110,7 +116,7 @@ async fn async_main() {
             &device,
             &queue,
             command_encoder,
-            &particle_buffer,
+            &simulation.particle_buffer,
         );
     })
     .await;
@@ -124,7 +130,7 @@ async fn async_main() {
         grid_partition.build_grid_with_encoder(
             &device,
             command_encoder,
-            &particle_buffer,
+            &simulation.particle_buffer,
             &bounds_partition.bounds_buffer,
         );
     })
@@ -202,6 +208,21 @@ async fn async_main() {
                     frame_count = 0;
                 }
 
+                simulation.simulate(
+                    &device,
+                    &queue,
+                    &bounds_partition.bounds_buffer,
+                    &grid_partition.grid_buffer,
+                );
+
+                // TODO: `build_grid` is not stable and seems to produce different data even with the same input
+                grid_partition.build_grid(
+                    &device,
+                    &queue,
+                    &simulation.particle_buffer,
+                    &bounds_partition.bounds_buffer,
+                );
+
                 let current_texture = surface
                     .get_current_texture()
                     .expect("Failed to get current texture");
@@ -212,7 +233,7 @@ async fn async_main() {
                     &device,
                     &queue,
                     &view,
-                    &particle_buffer,
+                    &simulation.particle_buffer,
                     &bounds_partition.bounds_buffer,
                     &grid_partition.grid_buffer,
                     &camera,

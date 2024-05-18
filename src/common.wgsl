@@ -4,6 +4,7 @@ const MAX_PARTICLES_PER_GRID_CELL = MAX_PARTICLES / GRID_SIZE;
 
 @export struct Particle {
   position: vec3<f32>,
+  old_position: vec3<f32>,
 }
 
 @export struct Bounds {
