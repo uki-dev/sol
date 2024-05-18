@@ -153,8 +153,8 @@ async fn async_main() {
 
     let visualisation = Visualisation::new(&device, surface_formats.into());
 
-    let mut last_tick = Instant::now();
-    let mut frame_count = 0;
+    // let mut frame_count = 0;
+    let mut previous_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -199,29 +199,35 @@ async fn async_main() {
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
-                frame_count += 1;
-                let elapsed = last_tick.elapsed();
-                if elapsed >= Duration::from_millis(1000) {
-                    let fps = frame_count as f64 / elapsed.as_secs_f64();
-                    println!("FPS: {:.2}", fps);
-                    last_tick = Instant::now();
-                    frame_count = 0;
-                }
+                // frame_count += 1;
+                // let elapsed = last_tick.elapsed();
+                // if elapsed >= Duration::from_millis(1000) {
+                //     let fps = frame_count as f64 / elapsed.as_secs_f64();
+                //     println!("FPS: {:.2}", fps);
+                //     last_tick = Instant::now();
+                //     frame_count = 0;
+                // }
+                let current_time = Instant::now();
+                let delta_time = current_time.duration_since(previous_time);
+                previous_time = current_time;
 
-                simulation.simulate(
-                    &device,
-                    &queue,
-                    &bounds_partition.bounds_buffer,
-                    &grid_partition.grid_buffer,
-                );
+                println!("Delta time: {}", delta_time.as_secs_f32());
 
-                // TODO: `build_grid` is not stable and seems to produce different data even with the same input
-                grid_partition.build_grid(
-                    &device,
-                    &queue,
-                    &simulation.particle_buffer,
-                    &bounds_partition.bounds_buffer,
-                );
+                // simulation.simulate(
+                //     &device,
+                //     &queue,
+                //     &bounds_partition.bounds_buffer,
+                //     &grid_partition.grid_buffer,
+                //     delta_time.as_secs_f32(),
+                // );
+
+                // // TODO: `build_grid` is not stable and seems to produce different data even with the same input
+                // grid_partition.build_grid(
+                //     &device,
+                //     &queue,
+                //     &simulation.particle_buffer,
+                //     &bounds_partition.bounds_buffer,
+                // );
 
                 let current_texture = surface
                     .get_current_texture()

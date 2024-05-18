@@ -60,11 +60,15 @@ fn vertex(
 fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     let ray_origin = uniforms.camera_position;
     let ray_direction = normalize((uniforms.inverse_view_projection * vec4<f32>(vertex.ndc, 1., 1.)).xyz);
-    let ray_march_result = ray_march(ray_origin, ray_direction);
-    if (!ray_march_result.hit) {
-        return vec4<f32>(ray_direction, 1.);
+    let bounds_min = vec3<f32>(vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z));
+    let bounds_max = vec3<f32>(vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z));
+    if (ray_box_intersection(ray_origin, ray_direction, bounds_min, bounds_max)) {
+        let ray_march_result = ray_march(ray_origin, ray_direction);
+        if (ray_march_result.hit) {
+            return vec4<f32>(diffuse(ray_march_result.colour.xyz, ray_march_result.normal), ray_march_result.colour.a);
+        }
     }
-    return vec4<f32>(diffuse(ray_march_result.colour.xyz, ray_march_result.normal), ray_march_result.colour.a);
+    return vec4<f32>(ray_direction, 1.);
 }
 
 fn diffuse(albedo: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
@@ -77,6 +81,16 @@ struct RayMarchResult {
     position: vec3<f32>,
     normal: vec3<f32>,
     colour: vec4<f32>,
+}
+
+fn ray_box_intersection(origin: vec3<f32>, direction: vec3<f32>, box_min: vec3<f32>, box_max: vec3<f32>) -> bool {
+    let t_min = (box_min - origin) / direction;
+    let t_max = (box_max - origin) / direction;
+    let t1 = min(t_min, t_max);
+    let t2 = max(t_min, t_max);
+    let t_near = max(max(t1.x, t1.y), t1.z);
+    let t_far = min(min(t2.x, t2.y), t2.z);
+    return t_far >= t_near;
 }
 
 fn ray_march_adaptive(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
@@ -155,6 +169,10 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
     let bounded_grid_position = clamp(grid_position, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
     let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
     let particles_length = grid[grid_index].particles_length;
+    if (particles_length == 0) {
+        result.distance = MAX_DISTANCE;
+        return result;
+    }
     result.distance = evaluate_particle(grid_index, 0u, position);
     for (var i = 1u; i < particles_length; i++) {
         result.distance = smooth_union(result.distance, evaluate_particle(grid_index, i, position), 1.0);
