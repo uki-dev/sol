@@ -94,9 +94,9 @@ async fn async_main() {
 
     for particle in particles.iter_mut() {
         let position = Vec3::new(
-            rng.gen_range(-32.0..32.0),
-            rng.gen_range(-32.0..32.0),
-            rng.gen_range(-32.0..32.0),
+            rng.gen_range(-16.0..16.0),
+            rng.gen_range(-16.0..16.0),
+            rng.gen_range(-16.0..16.0),
         );
         particle.position = position;
         particle.old_position = position;
@@ -213,21 +213,21 @@ async fn async_main() {
 
                 println!("Delta time: {}", delta_time.as_secs_f32());
 
-                // simulation.simulate(
-                //     &device,
-                //     &queue,
-                //     &bounds_partition.bounds_buffer,
-                //     &grid_partition.grid_buffer,
-                //     delta_time.as_secs_f32(),
-                // );
+                simulation.simulate(
+                    &device,
+                    &queue,
+                    &bounds_partition.bounds_buffer,
+                    &grid_partition.grid_buffer,
+                    delta_time.as_secs_f32(),
+                );
 
                 // // TODO: `build_grid` is not stable and seems to produce different data even with the same input
-                // grid_partition.build_grid(
-                //     &device,
-                //     &queue,
-                //     &simulation.particle_buffer,
-                //     &bounds_partition.bounds_buffer,
-                // );
+                grid_partition.build_grid(
+                    &device,
+                    &queue,
+                    &simulation.particle_buffer,
+                    &bounds_partition.bounds_buffer,
+                );
 
                 let current_texture = surface
                     .get_current_texture()

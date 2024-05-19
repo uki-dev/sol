@@ -161,7 +161,7 @@ fn evaluate_scene_normal(position: vec3<f32>) -> vec3<f32> {
     ));
 }
 
-fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult{
+fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult {
     var result: EvaluateSceneResult; 
     let bounds_min = vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z);
     let bounds_max = vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z);
