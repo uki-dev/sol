@@ -1,5 +1,7 @@
 #import ../common.wgsl as Common
 
+const EPSILON = .1;
+
 @export struct Uniforms {
     delta_time: f32,
 }
@@ -23,7 +25,7 @@ var<storage, read> grid: array<Common::GridCell>;
 // TODO: Replace this with actual particle radius
 const PARTICLE_RADIUS = 0.5;
 
-const ITERATIONS = 1u;
+const ITERATIONS = 2u;
 
 const GRAVITY = vec3<f32>(0.0, -9.81, 0.0);
 
@@ -41,11 +43,6 @@ fn simulate(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
     let delta_time = uniforms.delta_time / f32(ITERATIONS);
     let delta_time_squared = delta_time * delta_time;
 
-    let velocity = (current_position - previous_position) / delta_time;
-    let gravitational_force = GRAVITY * mass;
-    let frictional_force = -velocity * frictional_coefficient;
-    let acceleration = (gravitational_force + frictional_force) / mass;
-
     let bounds_min = vec3<f32>(vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z));
     let bounds_max = vec3<f32>(vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z));
     for (var i = 0u; i < ITERATIONS; i++) {
@@ -62,8 +59,12 @@ fn simulate(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
             );
         }
 
+        let velocity = (current_position - previous_position);
+        let gravitational_force = GRAVITY * mass;
+        let frictional_force = -velocity / delta_time * frictional_coefficient;
+        let acceleration = (gravitational_force + frictional_force) / mass;
+
         // Apply verlet integration
-        let velocity = (current_position - previous_position); // * damping;
         let next_position = current_position + velocity + acceleration * delta_time_squared;
         previous_position = current_position;
         current_position = next_position;
@@ -134,10 +135,11 @@ fn solve_collision(
     let direction = collision_position - position;
     let distance = length(direction);
     let min_distance = radius;
-    if (distance < min_distance) {
+    if (distance < min_distance && distance > EPSILON) {
         let normal = normalize(direction);
         let penetration = (min_distance - distance) * normal;
-        adjusted_position -= (penetration * 1.0 + restitution) * 0.5;
+        // 0.125 should be 0.5 but it seems to be more stable :sweat: 
+        adjusted_position -= (penetration * 1.0 + restitution) * 0.125;
     }
     return adjusted_position;
 }

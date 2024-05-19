@@ -1,8 +1,8 @@
 #import ../common.wgsl as Common
 
-const EPSILON = .0001;
+const EPSILON = .001;
 
-const STEP_SIZE = .01;
+const STEP_SIZE = .1;
 const MAX_DISTANCE = 128.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
@@ -161,6 +161,21 @@ fn evaluate_scene_normal(position: vec3<f32>) -> vec3<f32> {
     ));
 }
 
+fn evaluate_particles(position: vec3<f32>) -> EvaluateSceneResult {
+    var result: EvaluateSceneResult; 
+    result.distance = evaluate_particle(position, 0u);
+    for (var i = 1u; i < Common::MAX_PARTICLES; i++) {
+        result.distance = smooth_union(result.distance, evaluate_particle(position, i), 1.0);
+    }
+    return result;
+}
+
+fn evaluate_particle(position: vec3<f32>, particle_index: u32) -> f32 {
+    let particle = particles[particle_index];
+    let relative_position = position - particle.position;
+    return sphere(relative_position, 0.5);
+}
+
 fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult {
     var result: EvaluateSceneResult; 
     let bounds_min = vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z);
@@ -173,18 +188,16 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult {
         result.distance = MAX_DISTANCE;
         return result;
     }
-    result.distance = evaluate_particle(grid_index, 0u, position);
+    result.distance = evaluate_cell_particle(position, grid_index, 0u);
     for (var i = 1u; i < particles_length; i++) {
-        result.distance = smooth_union(result.distance, evaluate_particle(grid_index, i, position), 1.0);
+        result.distance = smooth_union(result.distance, evaluate_cell_particle(position, grid_index, i), 2.0);
     }
     return result;
 }
 
-fn evaluate_particle(grid_index: i32, cell_particle_index: u32, position: vec3<f32>) -> f32 {
+fn evaluate_cell_particle(position: vec3<f32>, grid_index: i32, cell_particle_index: u32) -> f32 {
     let particle_index = grid[grid_index].particles[cell_particle_index];
-    let particle = particles[particle_index];
-    let relative_position = position - particle.position;
-    return sphere(relative_position, 0.5);
+    return evaluate_particle(position, particle_index);
 }
 
 // fn occlusion(position: vec3<f32>, direction: vec3<f32>) -> f32 {

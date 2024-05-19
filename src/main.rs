@@ -147,7 +147,7 @@ async fn async_main() {
 
     // let mut simulation = Simulation::new(8, 8, 8, &device);
     // simulation.populate(&device, &queue);
-    let mut distance = 16.;
+    let mut distance = 64.;
     let mut camera = Camera::new();
     camera.position = camera.rotation * Vec3::new(0., 0., -distance);
 
