@@ -1,6 +1,7 @@
 const GRID_SIZE = 16u;
-const MAX_PARTICLES = 8192u; 
+const MAX_PARTICLES = 2048u; 
 const MAX_PARTICLES_PER_GRID_CELL = MAX_PARTICLES / GRID_SIZE;
+const PARTICLE_RADIUS = 0.8;
 
 @export struct Particle {
   position: vec3<f32>,

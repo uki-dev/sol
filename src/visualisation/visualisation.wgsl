@@ -1,5 +1,7 @@
 #import ../common.wgsl as Common
 
+const PI = 3.141592653589793;
+
 const EPSILON = .001;
 
 const STEP_SIZE = .1;
@@ -7,7 +9,7 @@ const MAX_DISTANCE = 128.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
 
-const LIGHT_COLOUR = vec3<f32>(0.8, 0.8, 0.8);
+const LIGHT_COLOUR = vec3<f32>(.8, .8, .8);
 const LIGHT_DIRECTION = vec3<f32>(.5, 1., -.3);
 
 @export struct Uniforms {
@@ -65,7 +67,10 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     if (ray_box_intersection(ray_origin, ray_direction, bounds_min, bounds_max)) {
         let ray_march_result = ray_march(ray_origin, ray_direction);
         if (ray_march_result.hit) {
-            return vec4<f32>(diffuse(ray_march_result.colour.xyz, ray_march_result.normal), ray_march_result.colour.a);
+            // TODO: Calculate this in the actual functions that return SDF so that we can use different SDF mapping where desired
+            let uv = sphere_uv(ray_march_result.position);
+            let colour = sand_texture(uv);
+            return vec4<f32>(diffuse(colour, ray_march_result.normal), 1.);
         }
     }
     return vec4<f32>(ray_direction, 1.);
@@ -104,7 +109,7 @@ fn ray_march_adaptive(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult
             result.position = position;
             result.normal = evaluate_scene_normal(position);
             // result.colour = evaluate_scene_result.object.colour;
-            result.colour = vec4<f32>(1.0);
+            result.colour = vec4<f32>(1.);
             return result;
         }
         distance = evaluate_scene_result.distance;
@@ -124,7 +129,7 @@ fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
             result.position = position;
             result.normal = evaluate_scene_normal(position);
             // result.colour = evaluate_scene_result.object.colour;
-            result.colour = vec4<f32>(1.0);
+            result.colour = vec4<f32>(1.);
             return result;
         }
     }
@@ -165,7 +170,7 @@ fn evaluate_particles(position: vec3<f32>) -> EvaluateSceneResult {
     var result: EvaluateSceneResult; 
     result.distance = evaluate_particle(position, 0u);
     for (var i = 1u; i < Common::MAX_PARTICLES; i++) {
-        result.distance = smooth_union(result.distance, evaluate_particle(position, i), 1.0);
+        result.distance = smooth_union(result.distance, evaluate_particle(position, i), 3.);
     }
     return result;
 }
@@ -173,7 +178,7 @@ fn evaluate_particles(position: vec3<f32>) -> EvaluateSceneResult {
 fn evaluate_particle(position: vec3<f32>, particle_index: u32) -> f32 {
     let particle = particles[particle_index];
     let relative_position = position - particle.position;
-    return sphere(relative_position, 0.5);
+    return sphere(relative_position, Common::PARTICLE_RADIUS);
 }
 
 fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult {
@@ -185,12 +190,12 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult {
     let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
     let particles_length = grid[grid_index].particles_length;
     if (particles_length == 0) {
-        result.distance = MAX_DISTANCE;
+        result.distance = STEP_SIZE;
         return result;
     }
     result.distance = evaluate_cell_particle(position, grid_index, 0u);
     for (var i = 1u; i < particles_length; i++) {
-        result.distance = smooth_union(result.distance, evaluate_cell_particle(position, grid_index, i), 2.0);
+        result.distance = smooth_union(result.distance, evaluate_cell_particle(position, grid_index, i), 3.);
     }
     return result;
 }
@@ -211,6 +216,45 @@ fn evaluate_cell_particle(position: vec3<f32>, grid_index: i32, cell_particle_in
 //     }
 //     return 1.;
 // }
+
+fn sand_texture(uv: vec2<f32>) -> vec3<f32> {
+    let n1 = noise(uv * 512.0);
+    let n2 = noise(uv * 1024.0);
+    let base_sand_colour = vec3<f32>(0.76, 0.70, 0.50);
+    let dark_sand_colour = base_sand_colour * 0.1;
+    let light_sand_colour = base_sand_colour * 2.0;
+    let colour = mix(mix(base_sand_colour, dark_sand_colour, n1), light_sand_colour, 0.8 + n2 * 0.2);
+    return colour;
+}
+
+fn hash(p: vec2<f32>) -> f32 {
+    let h = dot(p, vec2<f32>(127.1, 311.7));
+    return fract(sin(h) * 43758.5453123);
+}
+
+fn noise(p: vec2<f32>) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let a = hash(i);
+    let b = hash(i + vec2<f32>(1.0, 0.0));
+    let c = hash(i + vec2<f32>(0.0, 1.0));
+    let d = hash(i + vec2<f32>(1.0, 1.0));
+
+    let u = f * f * (3.0 - 2.0 * f);
+
+    return mix(a, b, u.x) +
+           (c - a) * u.y * (1.0 - u.x) +
+           (d - b) * u.x * u.y;
+}
+
+fn sphere_uv(position: vec3<f32>) -> vec2<f32> {
+    let normal = normalize(position);
+    let theta = atan2(normal.y, normal.x);
+    let phi = acos(normal.z);
+    let u = (theta + PI) / (2.0 * PI);
+    let v = phi / PI;
+    return vec2<f32>(u, v);
+}
 
 // https://iquilezles.org/articles/distfunctions/
 

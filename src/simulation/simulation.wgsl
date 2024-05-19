@@ -22,10 +22,9 @@ var<storage, read> bounds: Common::Bounds;
 @binding(3)
 var<storage, read> grid: array<Common::GridCell>;
 
-// TODO: Replace this with actual particle radius
-const PARTICLE_RADIUS = 0.5;
 
-const ITERATIONS = 2u;
+
+const ITERATIONS = 4u;
 
 const GRAVITY = vec3<f32>(0.0, -9.81, 0.0);
 
@@ -54,8 +53,8 @@ fn simulate(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
             current_position = solve_collision(
                 current_position,
                 particles[i].position,
-                // TODO: Replace this with actual particle radius
-                PARTICLE_RADIUS + PARTICLE_RADIUS,
+                // TODO: Replace this with actual particle radius rather than constant
+                Common::PARTICLE_RADIUS + Common::PARTICLE_RADIUS,
             );
         }
 
