@@ -153,12 +153,19 @@ async fn async_main() {
 
     let visualisation = Visualisation::new(&device, surface_formats.into());
 
+    let mut is_focused = true;
     let mut frame_count = 0;
     let mut last_frame_time = Instant::now();
     let mut previous_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
+            Event::WindowEvent {
+                event: WindowEvent::Focused(focused),
+                ..
+            } => {
+                is_focused = focused;
+            }
             Event::WindowEvent {
                 event: WindowEvent::CursorMoved { position, .. },
                 ..
@@ -216,7 +223,9 @@ async fn async_main() {
 
                 previous_time = current_time;
 
-                // println!("Delta time: {}", delta_time.as_secs_f32());
+                if (!is_focused) {
+                    return;
+                }
 
                 simulation.simulate(
                     &device,
