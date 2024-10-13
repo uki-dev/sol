@@ -23,8 +23,7 @@ var<storage, read> bounds: Common::Bounds;
 var<storage, read> grid: array<Common::GridCell>;
 
 
-
-const ITERATIONS = 4u;
+const ITERATIONS = 2u;
 
 const GRAVITY = vec3<f32>(0.0, -9.81, 0.0);
 
