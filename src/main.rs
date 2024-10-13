@@ -153,7 +153,8 @@ async fn async_main() {
 
     let visualisation = Visualisation::new(&device, surface_formats.into());
 
-    // let mut frame_count = 0;
+    let mut frame_count = 0;
+    let mut last_frame_time = Instant::now();
     let mut previous_time = Instant::now();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
@@ -199,19 +200,23 @@ async fn async_main() {
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
-                // frame_count += 1;
-                // let elapsed = last_tick.elapsed();
-                // if elapsed >= Duration::from_millis(1000) {
-                //     let fps = frame_count as f64 / elapsed.as_secs_f64();
-                //     println!("FPS: {:.2}", fps);
-                //     last_tick = Instant::now();
-                //     frame_count = 0;
-                // }
                 let current_time = Instant::now();
                 let delta_time = current_time.duration_since(previous_time);
+                frame_count += 1;
+
+                let elapsed = last_frame_time.elapsed();
+                if elapsed >= Duration::from_millis(1000) {
+                    let fps = frame_count as f64 / elapsed.as_secs_f64();
+                    let delta_time = elapsed.as_secs_f64() / frame_count as f64 * 1000.0;
+                    let title = format!("🌎 | {:.0}fps | {:.2}ms", fps, delta_time);
+                    window.set_title(&title);
+                    last_frame_time = current_time;
+                    frame_count = 0;
+                }
+
                 previous_time = current_time;
 
-                println!("Delta time: {}", delta_time.as_secs_f32());
+                // println!("Delta time: {}", delta_time.as_secs_f32());
 
                 simulation.simulate(
                     &device,

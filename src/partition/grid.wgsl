@@ -40,9 +40,11 @@ fn build_grid(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
   for (grid_position.x = min_grid_position.x; grid_position.x <= max_grid_position.x; grid_position.x++) {
     for (grid_position.y = min_grid_position.y; grid_position.y <= max_grid_position.y; grid_position.y++) {
       for (grid_position.z = min_grid_position.z; grid_position.z <= max_grid_position.z; grid_position.z++) {
-          let grid_index = Common::grid_position_to_grid_index(grid_position);
-          let particles_length = atomicAdd(&grid[grid_index].particles_length, 1u);
+        let grid_index = Common::grid_position_to_grid_index(grid_position);
+        let particles_length = atomicAdd(&grid[grid_index].particles_length, 1u);
+        if (particles_length < Common::MAX_PARTICLES_PER_GRID_CELL) {
           grid[grid_index].particles[particles_length] = particle_index;
+        }
       }
     }
   }

@@ -4,7 +4,7 @@ const PI = 3.141592653589793;
 
 const EPSILON = .001;
 
-const STEP_SIZE = .1;
+const STEP_SIZE = .5;
 const MAX_DISTANCE = 128.;
 const SHADOW_STEP_SIZE = .01;
 const SHADOW_MAX_DISTANCE = 8.;
@@ -146,7 +146,7 @@ fn evaluate_scene(position: vec3<f32>) -> EvaluateSceneResult {
     var result: EvaluateSceneResult; 
     result.distance = MAX_DISTANCE;
     // result.distance = sphere(position - vec3<f32>(0.0), 0.5);
-    result = evaluate_grid(position);
+    result = evaluate_particles(position);
   
     return result;
 }
@@ -189,12 +189,8 @@ fn evaluate_grid(position: vec3<f32>) -> EvaluateSceneResult {
     let bounded_grid_position = clamp(grid_position, vec3<i32>(bounds_min), vec3<i32>(bounds_max));
     let grid_index = Common::grid_position_to_grid_index(bounded_grid_position);
     let particles_length = grid[grid_index].particles_length;
-    if (particles_length == 0) {
-        result.distance = STEP_SIZE;
-        return result;
-    }
-    result.distance = evaluate_cell_particle(position, grid_index, 0u);
-    for (var i = 1u; i < particles_length; i++) {
+    result.distance = MAX_DISTANCE;
+    for (var i = 0u; i < particles_length; i++) {
         result.distance = smooth_union(result.distance, evaluate_cell_particle(position, grid_index, i), 3.);
     }
     return result;
@@ -221,7 +217,7 @@ fn sand_texture(uv: vec2<f32>) -> vec3<f32> {
     let n1 = noise(uv * 512.0);
     let n2 = noise(uv * 1024.0);
     let base_sand_colour = vec3<f32>(0.76, 0.70, 0.50);
-    let dark_sand_colour = base_sand_colour * 0.1;
+    let dark_sand_colour = base_sand_colour * -1.0;
     let light_sand_colour = base_sand_colour * 2.0;
     let colour = mix(mix(base_sand_colour, dark_sand_colour, n1), light_sand_colour, 0.8 + n2 * 0.2);
     return colour;
