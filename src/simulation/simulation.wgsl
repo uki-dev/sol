@@ -4,6 +4,7 @@ const EPSILON = .1;
 
 @export struct Uniforms {
     delta_time: f32,
+    gravity: vec3<f32>,
 }
 
 @group(0)
@@ -22,10 +23,7 @@ var<storage, read> bounds: Common::Bounds;
 @binding(3)
 var<storage, read> grid: array<Common::GridCell>;
 
-
 const ITERATIONS = 2u;
-
-const GRAVITY = vec3<f32>(0.0, -9.81, 0.0);
 
 @compute
 @workgroup_size(1)
@@ -58,7 +56,7 @@ fn simulate(@builtin(global_invocation_id) global_invocation_id: vec3<u32>) {
         }
 
         let velocity = (current_position - previous_position);
-        let gravitational_force = GRAVITY * mass;
+        let gravitational_force = uniforms.gravity * mass;
         let frictional_force = -velocity / delta_time * frictional_coefficient;
         let acceleration = (gravitational_force + frictional_force) / mass;
 

@@ -1,6 +1,7 @@
 use crate::common::{Particle, MAX_PARTICLES};
 use bytemuck::{Pod, Zeroable};
 use encase::{ShaderSize, UniformBuffer};
+use glam::Vec3;
 use std::borrow::Cow;
 use wgpu::{
     BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Buffer,
@@ -126,9 +127,11 @@ impl Simulation {
         bounds_buffer: &Buffer,
         grid_buffer: &Buffer,
         delta_time: f32,
+        gravity: Vec3,
     ) {
         let uniforms = Uniforms {
-            delta_time: delta_time,
+            delta_time,
+            gravity,
         };
         let mut encased_uniform_buffer = UniformBuffer::new(Vec::<u8>::new());
         encased_uniform_buffer.write(&uniforms).unwrap();

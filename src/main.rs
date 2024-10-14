@@ -155,8 +155,10 @@ async fn async_main() {
 
     let mut is_focused = true;
     let mut frame_count = 0;
-    let mut last_frame_time = Instant::now();
-    let mut previous_time = Instant::now();
+
+    let start_instant = Instant::now();
+    let mut last_frame_time = start_instant;
+    let mut previous_instant = start_instant;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Poll;
         match event {
@@ -207,32 +209,44 @@ async fn async_main() {
                 surface.configure(&device, &surface_configuration);
             }
             Event::MainEventsCleared => {
-                let current_time = Instant::now();
-                let delta_time = current_time.duration_since(previous_time);
+                let instant = Instant::now();
+                let time = start_instant.elapsed().as_secs_f32();
+                let delta_time = instant.duration_since(previous_instant).as_secs_f32();
                 frame_count += 1;
 
                 let elapsed = last_frame_time.elapsed();
                 if elapsed >= Duration::from_millis(1000) {
-                    let fps = frame_count as f64 / elapsed.as_secs_f64();
-                    let delta_time = elapsed.as_secs_f64() / frame_count as f64 * 1000.0;
+                    let fps = frame_count as f32 / elapsed.as_secs_f32();
+                    let delta_time = elapsed.as_secs_f32() / frame_count as f32 * 1000.0;
                     let title = format!("🌎 | {:.0}fps | {:.2}ms", fps, delta_time);
                     window.set_title(&title);
-                    last_frame_time = current_time;
+                    last_frame_time = instant;
                     frame_count = 0;
                 }
 
-                previous_time = current_time;
+                previous_instant = instant;
 
                 if (!is_focused) {
                     return;
                 }
+
+                let gravity: Vec3 = Vec3::new(0.0, -9.8, 0.0);
+                let spin_rate = std::f32::consts::PI / 32.0;
+                let gravity_rotation = Quat::from_euler(
+                    glam::EulerRot::XYZ,
+                    spin_rate * time,
+                    spin_rate * time,
+                    spin_rate * time,
+                );
+                let rotated_gravity = gravity_rotation * gravity;
 
                 simulation.simulate(
                     &device,
                     &queue,
                     &bounds_partition.bounds_buffer,
                     &grid_partition.grid_buffer,
-                    delta_time.as_secs_f32(),
+                    delta_time,
+                    rotated_gravity,
                 );
 
                 // // TODO: `build_grid` is not stable and seems to produce different data even with the same input
