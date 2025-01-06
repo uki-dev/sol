@@ -68,24 +68,80 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
         let ray_march_result = ray_march_adaptive(ray_origin, ray_direction);
         if (ray_march_result.hit) {
             // TODO: Calculate this in the actual functions that return SDF so that we can use different SDF mapping where desired
-            let uv = sphere_uv(ray_march_result.position);
-            let colour = sand_texture(uv);
-            return vec4<f32>(diffuse(colour, ray_march_result.normal), 1.);
+            // let uv = sphere_uv(ray_march_result.position);
+            let colour = ray_march_result.colour;
+            let d = diffuse(colour, ray_march_result.normal);
+            let m = metallic(vec3<f32>(1.), ray_march_result.normal, ray_direction);
+            let f = vec3<f32>(fresnel(ray_march_result.normal, ray_direction, 1.5));
+
+            return vec4<f32>(m * f + (d * (vec3<f32>(1.) - f)), 1.);
         }
     }
-    return vec4<f32>(ray_direction, 1.);
+    return vec4<f32>(background(ray_direction), 1.);
 }
 
 fn diffuse(albedo: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
-    let illumination = LIGHT_COLOUR * max(dot(normal, normalize(LIGHT_DIRECTION)), 0.);
+    let i0 = background(normal);
+    let i1 = background(spread_rays(normal, 45.0, 0u, 4u));
+    let i2 = background(spread_rays(normal, 45.0, 1u, 4u));
+    let i3 = background(spread_rays(normal, 45.0, 2u, 4u));
+    let i4 = background(spread_rays(normal, 45.0, 3u, 4u));
+    let illumination = (i0 + i1 + i2 + i3 + i4) / vec3<f32>(5.0);
     return albedo * illumination;
+}
+
+
+fn spread_rays(original_ray: vec3<f32>, spread_degrees: f32, ray_index: u32, num_rays: u32) -> vec3<f32> {
+    let half_spread_rad = radians(spread_degrees * 0.5);
+    let angle_step_rad = radians(spread_degrees) / (f32(ray_index) * 2.0 + 1.0);
+    let angle_offset_rad = f32(ray_index - num_rays / 2) * angle_step_rad;
+
+    let rotation_axis = cross(original_ray, vec3<f32>(0.0, 0.0, 1.0));
+    let rotation_matrix = mat3x3<f32>(
+        cos(angle_offset_rad) + rotation_axis.x * rotation_axis.x * (1.0 - cos(angle_offset_rad)),
+        rotation_axis.x * rotation_axis.y * (1.0 - cos(angle_offset_rad)) - rotation_axis.z * sin(angle_offset_rad),
+        rotation_axis.x * rotation_axis.z * (1.0 - cos(angle_offset_rad)) + rotation_axis.y * sin(angle_offset_rad),
+
+        rotation_axis.x * rotation_axis.y * (1.0 - cos(angle_offset_rad)) + rotation_axis.z * sin(angle_offset_rad),
+        cos(angle_offset_rad) + rotation_axis.y * rotation_axis.y * (1.0 - cos(angle_offset_rad)),
+        rotation_axis.y * rotation_axis.z * (1.0 - cos(angle_offset_rad)) - rotation_axis.x * sin(angle_offset_rad),
+
+        rotation_axis.x * rotation_axis.z * (1.0 - cos(angle_offset_rad)) - rotation_axis.y * sin(angle_offset_rad),
+        rotation_axis.y * rotation_axis.z * (1.0 - cos(angle_offset_rad)) + rotation_axis.x * sin(angle_offset_rad),
+        cos(angle_offset_rad) + rotation_axis.z * rotation_axis.z * (1.0 - cos(angle_offset_rad))
+    );
+
+    return normalize(rotation_matrix * original_ray);
+}
+
+
+fn fresnel(normal: vec3<f32>, incident_direction: vec3<f32>, ior_ratio: f32) -> f32 {
+    let similarity = dot(normal, vec3<f32>(-1) * incident_direction);
+    return pow(1. - similarity, 5.0);
+}
+
+
+fn metallic(colour: vec3<f32>, normal: vec3<f32>, incoming: vec3<f32>) -> vec3<f32> {
+    let illumination = background(reflect(incoming, normal));
+    return colour * illumination;
+}
+
+fn reflect(direction: vec3<f32>, normal: vec3<f32>) -> vec3<f32> {
+    let dotProduct = dot(direction, normal);
+    return direction - 2.0 * dotProduct * normal;
+}
+
+
+fn background(normal: vec3<f32>) -> vec3<f32> {
+    // return vec3<f32>(normal.z);
+    return normal;
 }
 
 struct RayMarchResult {
     hit: bool,
     position: vec3<f32>,
     normal: vec3<f32>,
-    colour: vec4<f32>,
+    colour: vec3<f32>,
 }
 
 fn ray_box_intersection(origin: vec3<f32>, direction: vec3<f32>, box_min: vec3<f32>, box_max: vec3<f32>) -> bool {
@@ -109,7 +165,7 @@ fn ray_march_adaptive(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult
             result.position = position;
             result.normal = evaluate_scene_normal(position);
             // result.colour = evaluate_scene_result.object.colour;
-            result.colour = vec4<f32>(1.);
+            result.colour = vec3<f32>(1., 0.5, 0.3);
             return result;
         }
         distance = evaluate_scene_result.distance;
@@ -129,7 +185,7 @@ fn ray_march(origin: vec3<f32>, direction: vec3<f32>) -> RayMarchResult {
             result.position = position;
             result.normal = evaluate_scene_normal(position);
             // result.colour = evaluate_scene_result.object.colour;
-            result.colour = vec4<f32>(1.);
+            result.colour = vec3<f32>(1.);
             return result;
         }
     }
