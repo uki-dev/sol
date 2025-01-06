@@ -65,7 +65,7 @@ fn fragment(vertex: Vertex) -> @location(0) vec4<f32> {
     let bounds_min = vec3<f32>(vec3<i32>(bounds.min_x, bounds.min_y, bounds.min_z));
     let bounds_max = vec3<f32>(vec3<i32>(bounds.max_x, bounds.max_y, bounds.max_z));
     if (ray_box_intersection(ray_origin, ray_direction, bounds_min, bounds_max)) {
-        let ray_march_result = ray_march(ray_origin, ray_direction);
+        let ray_march_result = ray_march_adaptive(ray_origin, ray_direction);
         if (ray_march_result.hit) {
             // TODO: Calculate this in the actual functions that return SDF so that we can use different SDF mapping where desired
             let uv = sphere_uv(ray_march_result.position);
